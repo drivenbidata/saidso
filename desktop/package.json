@@ -1,0 +1,25 @@
+{
+  "name": "saidso-desktop",
+  "productName": "saidso",
+  "version": "0.1.0",
+  "description": "Desktop shell for saidso \u2014 record, transcribe and file meetings locally.",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "JaviGold"
+  },
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "check": "node --check main.js && node --check preload.js && node --check renderer/app.js",
+    "build:engine": "cd .. && python -m PyInstaller packaging/saidso-engine.spec --noconfirm --distpath dist/engine --workpath build/pyinstaller",
+    "package": "electron-forge package",
+    "make": "npm run build:engine && electron-forge make"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^7.6.0",
+    "@electron-forge/maker-squirrel": "^7.6.0",
+    "@electron-forge/maker-zip": "^7.6.0",
+    "electron": "^33.0.0"
+  }
+}

@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "saidso"
+version = "0.1.0"
+description = "Record, transcribe and organise meetings on your own machine. Audio never leaves it."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+keywords = ["meetings", "transcription", "whisper", "notes", "obsidian"]
+authors = [{ name = "saidso contributors" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Office/Business",
+]
+
+# The core install stays deliberately light: parsing, routing, trackers, config
+# and the local API all run on the standard library. Anything that pulls in a
+# model runtime or a native audio backend is an extra.
+dependencies = ["tomli-w>=1.0"]
+
+[project.optional-dependencies]
+transcribe = ["faster-whisper>=1.0.0"]
+capture = ["PyAudioWPatch>=0.2.12; sys_platform == 'win32'"]
+diarize = ["pyannote.audio>=3.1"]
+docx = ["python-docx>=1.1"]
+all = [
+    "faster-whisper>=1.0.0",
+    "PyAudioWPatch>=0.2.12; sys_platform == 'win32'",
+    "python-docx>=1.1",
+]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.scripts]
+saidso = "saidso.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/drivenbidata/saidso"
+Source = "https://github.com/drivenbidata/saidso"
+Issues = "https://github.com/drivenbidata/saidso/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/saidso"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore = ["E501"]

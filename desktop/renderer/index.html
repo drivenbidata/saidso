@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:;"
+    />
+    <title>saidso</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="mark" aria-hidden="true"></span>
+        <h1>saidso</h1>
+      </div>
+      <div class="topbar-right">
+        <button id="reveal-notes" class="link" type="button" hidden>Open notes folder</button>
+        <span id="status" class="pill pill-wait">starting…</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="card record" aria-labelledby="record-heading">
+        <h2 id="record-heading">Record a meeting</h2>
+
+        <div class="fields">
+          <label class="field">
+            <span>Meeting name</span>
+            <input id="title" type="text" placeholder="Weekly Sync" autocomplete="off" />
+          </label>
+          <label class="field field-narrow">
+            <span>Project</span>
+            <select id="project"></select>
+          </label>
+        </div>
+
+        <div class="record-row">
+          <button id="record" class="primary" type="button" disabled>Record</button>
+          <button id="cancel" class="ghost" type="button" hidden>Discard</button>
+          <span id="timer" class="timer" aria-live="off">00:00</span>
+        </div>
+
+        <dl class="devices">
+          <div><dt>Microphone</dt><dd id="dev-mic">—</dd></div>
+          <div><dt>System audio</dt><dd id="dev-sys">—</dd></div>
+        </dl>
+      </section>
+
+      <section class="card" aria-labelledby="files-heading">
+        <h2 id="files-heading">Transcribe recordings</h2>
+        <p class="muted">
+          Audio or video files already on disk. Everything runs locally.
+        </p>
+        <div id="drop" class="drop">
+          <button id="pick" class="secondary" type="button" disabled>Choose files…</button>
+          <span class="drop-hint">or drop them here</span>
+        </div>
+      </section>
+
+      <section class="card progress-card" aria-labelledby="progress-heading">
+        <h2 id="progress-heading">Activity</h2>
+        <div class="bar" role="progressbar" aria-labelledby="progress-heading">
+          <div id="bar-fill"></div>
+        </div>
+        <p id="progress-msg" class="muted">Idle.</p>
+        <ul id="log" class="log" aria-live="polite"></ul>
+      </section>
+
+      <section class="card" aria-labelledby="inbox-heading">
+        <div class="card-head">
+          <h2 id="inbox-heading">Inbox</h2>
+          <div class="card-actions">
+            <button id="sweep" class="link" type="button">Sweep trackers</button>
+            <button id="refresh" class="link" type="button">Refresh</button>
+          </div>
+        </div>
+        <p class="muted">
+          Transcripts waiting to be written up. Point your agent at this folder —
+          see <code>agent-pack/</code>.
+        </p>
+        <ul id="inbox" class="inbox"></ul>
+      </section>
+
+      <section class="card" aria-labelledby="settings-heading">
+        <h2 id="settings-heading">Settings</h2>
+
+        <div class="setting">
+          <label for="notes-dir">Notes folder</label>
+          <div class="setting-row">
+            <input id="notes-dir" type="text" readonly />
+            <button id="change-notes" class="secondary" type="button">Change…</button>
+          </div>
+          <p class="hint">
+            Where transcripts, notes and trackers are written. Existing files stay
+            where they are — moving them is up to you.
+          </p>
+        </div>
+
+        <div class="setting">
+          <label for="speaker-name">Your name</label>
+          <div class="setting-row">
+            <input id="speaker-name" type="text" placeholder="e.g. Javi Gold" autocomplete="off" />
+            <button id="save-name" class="secondary" type="button">Save</button>
+          </div>
+          <p class="hint">
+            Your speaker tag on the microphone track, so your own words are
+            attributed to you rather than to “Me”.
+          </p>
+        </div>
+
+        <p class="hint config-path">
+          Everything else lives in <code id="config-path">config.toml</code>.
+        </p>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

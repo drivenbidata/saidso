@@ -1,0 +1,72 @@
+name: Release
+
+# Installers are built per-platform because PyInstaller freezes for the machine
+# it runs on; there is no cross-compiling this.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  installers:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install the engine and its build tooling
+        run: |
+          pip install -e ".[all]"
+          pip install pyinstaller
+
+      - name: Freeze the engine
+        run: >
+          python -m PyInstaller packaging/saidso-engine.spec --noconfirm
+          --distpath dist/engine --workpath build/pyinstaller
+
+      - name: Check the frozen engine actually starts
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, subprocess, sys, glob
+          exe = glob.glob("dist/engine/saidso-engine/saidso-engine*")[0]
+          p = subprocess.Popen([exe, "--port", "0", "--exit-with-parent"],
+                               stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+          handshake = json.loads(p.stdout.readline())
+          assert handshake["saidso-server"], handshake
+          print("engine started:", handshake["saidso-server"], "on port", handshake["port"])
+          p.stdin.close()
+          sys.exit(p.wait(timeout=30))
+          PY
+
+      - name: Build the installer
+        working-directory: desktop
+        run: |
+          npm install --no-audit --no-fund
+          npx electron-forge make
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: saidso-${{ matrix.os }}
+          path: desktop/out/make/**/*
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: desktop/out/make/**/*
+          draft: true

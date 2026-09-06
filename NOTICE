@@ -1,0 +1,15 @@
+saidso
+Copyright 2026 saidso contributors
+
+This product includes software developed by the saidso contributors.
+
+The transcript parser and the meeting-note synthesis rules in agent-pack/
+originate from a personal meeting-notes pipeline by Javi Gold, contributed
+to this project under the Apache License, Version 2.0.
+
+This software optionally depends on, but does not redistribute:
+  - faster-whisper (MIT) and CTranslate2 (MIT)
+  - PyAudioWPatch (MIT)
+  - pyannote.audio (MIT); its models carry their own terms and require
+    accepting the model licence on Hugging Face
+  - python-docx (MIT)

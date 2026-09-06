@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node / Electron
+node_modules/
+desktop/dist/
+desktop/out/
+
+# Never commit recordings or models
+*.mp3
+*.mp4
+*.m4a
+*.wav
+*.webm
+*.ogg
+*.oga
+*.flac
+*.mkv
+*.mov
+*.aac
+*.wma
+*.avi
+*.opus
+models/
+.recordings/
+
+# Local state that is per-machine, not per-project
+config.local.toml
+*.local.toml
+.saidso/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.tmp
