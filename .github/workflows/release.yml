@@ -7,8 +7,14 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+# attestations/id-token let GitHub sign a provenance statement for each
+# installer: proof that this exact binary came out of this workflow, from this
+# commit. It is not code signing - the OS still warns - but it is verifiable by
+# anyone with `gh attestation verify`, and it costs nothing.
 permissions:
   contents: write
+  attestations: write
+  id-token: write
 
 jobs:
   installers:
@@ -58,6 +64,29 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           npx electron-forge make
+
+      # Checksums are what a person can check by hand, without any tooling
+      # and without trusting GitHub's API. Names are relative so the file reads
+      # the same as the directory people download into.
+      - name: Checksum the installers
+        shell: bash
+        working-directory: desktop/out/make
+        run: |
+          find . -type f ! -name 'SHA256SUMS*' -print0             | sort -z             | xargs -0 sha256sum > "SHA256SUMS-${{ matrix.os }}.txt"
+          cat "SHA256SUMS-${{ matrix.os }}.txt"
+
+      # Provenance for the installers themselves, not the checksum file: the
+      # attestation is what makes the checksums worth trusting.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            desktop/out/make/**/*.exe
+            desktop/out/make/**/*.zip
+            desktop/out/make/**/*.nupkg
+            desktop/out/make/**/*.dmg
+            desktop/out/make/**/*.deb
+            desktop/out/make/**/*.rpm
 
       - uses: actions/upload-artifact@v4
         with:

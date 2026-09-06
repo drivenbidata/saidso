@@ -58,6 +58,16 @@ Extras, if you'd rather be specific:
 
 The first transcription downloads the Whisper model (~150 MB for `base`).
 
+## Verifying a download
+
+Releases are unsigned, so Windows and macOS will warn. Every installer ships
+with a SHA256SUMS file and a GitHub build provenance attestation, so you can
+confirm a binary is the one this repository's workflow built:
+
+```bash
+gh attestation verify saidso-setup.exe --repo drivenbidata/saidso
+```
+
 ## Quick start
 
 ```bash

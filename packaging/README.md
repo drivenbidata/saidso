@@ -99,6 +99,23 @@ that belong to whoever publishes the releases, so it is left to them:
 `packagerConfig.osxSign` / `osxNotarize`, and a `certificateFile` on the
 Squirrel maker.
 
+What the release workflow does instead costs nothing and is worth having even
+once signing exists:
+
+- **SHA256SUMS** beside the installers, so a download can be checked by hand.
+- **Build provenance attestations**, which let anyone confirm a binary came out
+  of this repository's workflow at a particular commit:
+
+  ```bash
+  gh attestation verify saidso-setup.exe --repo drivenbidata/saidso
+  ```
+
+Neither stops the operating system warning — only a certificate does that. They
+answer a different question: not "is this publisher trusted" but "is this the
+file the build produced, unaltered." A checksum with no attestation is weak,
+because whoever could replace the binary could replace the checksum too; the
+attestation is signed by GitHub and cannot be forged that way.
+
 ## Platform notes
 
 Builds are not cross-platform: PyInstaller freezes for the machine it runs on,
