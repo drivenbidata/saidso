@@ -1,11 +1,12 @@
 saidso
-Copyright 2026 saidso contributors
+Copyright 2026 Javi Gold
 
-This product includes software developed by the saidso contributors.
+This product includes software developed by Javi Gold and the saidso
+contributors.
 
 The transcript parser and the meeting-note synthesis rules in agent-pack/
-originate from a personal meeting-notes pipeline by Javi Gold, contributed
-to this project under the Apache License, Version 2.0.
+began as a personal meeting-notes pipeline and were rewritten for this
+project.
 
 This software optionally depends on, but does not redistribute:
   - faster-whisper (MIT) and CTranslate2 (MIT)
