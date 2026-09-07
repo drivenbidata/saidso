@@ -77,7 +77,16 @@ def recordings_dir() -> Path:
 
 
 def default_notes_dir() -> Path:
-    """The notes library used when the user hasn't chosen one."""
+    """The notes library used when the user hasn't chosen one.
+
+    Respects SAIDSO_HOME, so that variable really does isolate everything. It
+    did not, once: config went to the sandbox while notes still went to the
+    real `~/saidso`, and a test run that looked self-contained quietly wrote a
+    transcript into a person's actual notes folder. An override that isolates
+    only some paths is worse than none, because it reads as complete.
+    """
+    if (home := _env_home()) is not None:
+        return home / "notes"
     return Path.home() / "saidso"
 
 
