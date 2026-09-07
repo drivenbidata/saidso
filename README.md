@@ -84,6 +84,45 @@ saidso watch ~/Downloads/recordings         # transcribe anything dropped there
 saidso parse teams-export.vtt               # clean Speaker: text, for a model
 ```
 
+## Commands
+
+`saidso <command> --help` gives the full flags for any of these.
+
+| Command | What it does |
+| --- | --- |
+| `init` | Write the config and create the notes folder. `--notes-dir`, `--name`, `--force`. |
+| `devices` | List microphones and system-audio inputs, marking the defaults. |
+| `record` | Record a meeting; Enter stops and transcribes, Ctrl+C discards. |
+| `transcribe` | Transcribe audio or video files, or a folder of them. |
+| `ingest` | File an existing transcript — a `.vtt`, `.docx`, `.md` or `.txt` export. |
+| `watch` | Transcribe anything dropped into a folder, moving handled files aside. |
+| `parse` | Print a clean `Speaker: text` log to stdout. `--speakers` for just the names. |
+| `projects` | List configured projects and which is the default. |
+| `tracker sweep` | Move ticked items into Completed and rebuild the index. `--dry-run`. |
+| `tracker add` | Insert a meeting and its items under `## Open`. |
+| `sync` | Pull, stage, guard, commit, push. `-m`, `--no-push`, `--dry-run`. |
+| `config show` / `path` | Print the config, or where it lives. |
+
+Flags shared by most commands: `--project KEY` to override routing, `--config FILE`
+and `--notes-dir DIR` to work against a different setup, `-q` to silence progress.
+
+### The three ways material comes in
+
+```bash
+saidso record --name "Weekly Sync"     # a meeting happening now
+saidso transcribe recording.mp4        # audio or video, transcribed locally
+saidso ingest teams-export.vtt         # a transcript some other tool produced
+```
+
+All three end the same way: one markdown transcript in `inbox/`, with the same
+frontmatter, routed to the same projects. Nothing downstream can tell which
+route a transcript took.
+
+`ingest` leaves your original file exactly where it is, and writes the dialogue
+without timestamps — an export's cue times describe cue boundaries rather than
+speaking turns, and inventing plausible-looking times would be worse than
+having none.
+
 ## What you get
 
 ```
@@ -232,6 +271,82 @@ keep_audio = false
 [output]
 flavor = "plain"            # or "obsidian", for wiki-links
 ```
+
+## Troubleshooting
+
+Every entry here was hit for real.
+
+**`saidso: command not found` after `pip install`**
+The script installed somewhere that isn't on your `PATH` — common with the
+Microsoft Store build of Python, which puts scripts under
+`%LOCALAPPDATA%\Packages\PythonSoftwareFoundation.Python…\LocalCache\local-packages\Python3xx\Scripts`.
+Find it with `python -c "import sysconfig; print(sysconfig.get_path('scripts', 'nt_user'))"`,
+or skip the problem entirely with `python -m saidso.cli …`.
+
+**The desktop app says "No saidso engine found"**
+You are running from source without an engine. Either build one
+(`npm run build:engine`) or install the package so some Python can import it
+(`pip install "saidso[all]"`). If the wrong interpreter is first on your `PATH`,
+point `SAIDSO_PYTHON` at the right one. A packaged build ships its own engine
+and never sees this.
+
+**Windows says "Windows protected your PC", macOS says the developer can't be verified**
+The builds are unsigned. On Windows: *More info → Run anyway*. On macOS:
+right-click the app → *Open*. See [Verifying a download](#verifying-a-download)
+for how to confirm a binary is genuine without a certificate.
+
+**Nothing was recorded, or only your own voice**
+Run `saidso devices` and check the system-audio entry is a **loopback** device.
+Loopback captures what the machine plays, which is everyone else on the call —
+without it you record only your microphone. Set `capture.system` in the config
+to a name fragment of the right device. Note that a loopback delivers nothing at
+all while the machine is silent, so a recording made with everything muted is
+correctly empty rather than broken.
+
+**`… isn't a recognised audio or video file`**
+It is probably already a transcript. `saidso transcribe` is for media;
+`saidso ingest` is for `.vtt`, `.docx`, `.md` and `.txt`.
+
+**A run stopped with "very close to <project>"**
+A filename began with something one character away from a project key. That is
+deliberate: a misfiled meeting is expensive precisely because nobody notices.
+Rename the file, or say which you meant with `--project`.
+
+**Dates are wrong on a batch of downloaded transcripts**
+Look for `date_inferred: true` in the frontmatter. It means the date came from
+the file's modification time, which for a download is the *download* date — so a
+batch fetched together all look like the same day. Put the real date in the
+filename (`2026-09-01_Weekly-Sync.vtt`) or pass `--date`, and it becomes
+authoritative.
+
+**Speakers are "Others" instead of names**
+Diarisation is off or unavailable. It is optional by design; your own track is
+always labelled correctly without it. To split the other participants, install
+`pip install "saidso[diarize]"`, set `SAIDSO_HF_TOKEN`, and accept the model
+terms on Hugging Face. `saidso transcribe --diarize` says why it skipped.
+
+**`saidso sync` refused to commit a deletion**
+Working as intended. An unattended sync should almost never delete a note, and
+this guard exists because one silently did. Find out what is missing and why —
+another machine may have created it — before setting `sync.allow_deletions`.
+
+**`saidso tracker sweep` reported REFUSED and changed nothing**
+The rewrite failed its own validation, so the tracker was left exactly as it
+was. Nothing is lost. The message names the check that failed; the usual cause
+is hand-editing that made the Open and Completed sections inconsistent.
+
+**The first transcription takes a long time**
+It downloads the Whisper model (~150 MB for `base`) into your cache. Subsequent
+runs reuse it. `--model tiny` is much smaller and quicker if you just want to
+see it work.
+
+**A packaged build hangs with no error at all**
+Get a stack out of it — a frozen app has no traceback otherwise:
+```bash
+SAIDSO_STACK_AFTER=40 saidso-engine.exe --port 0
+```
+Every thread's stack goes to stderr after 40 seconds, repeatedly. See
+[packaging/README.md](packaging/README.md).
 
 ## Development
 

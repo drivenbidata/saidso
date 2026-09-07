@@ -34,6 +34,13 @@ from a window — the notes folder, your speaker name, the model — because a
 settings endpoint that can rewrite anything is one that can corrupt anything.
 The project list and the rest stay in the file.
 
+## What the window cannot do yet
+
+Filing an existing transcript export. `saidso ingest` handles `.vtt`, `.docx`,
+`.md` and `.txt` from the command line, but the window's file picker takes
+media only. Wiring it in means widening the picker's filters and routing on the
+file extension in `/transcribe`.
+
 ## How the pieces fit
 
 ```

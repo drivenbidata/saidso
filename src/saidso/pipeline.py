@@ -24,7 +24,8 @@ from .capture import LOOPBACK, MIC, Recorder, Track, get_backend
 from .config import Config
 from .errors import SaidsoError
 from .models import Segment, TranscriptMeta
-from .output import naming, routing, write_transcript, write_vtt
+from .output import naming, read_meta, routing, write_dialogue, write_transcript, write_vtt
+from .parse import parse_file
 from .transcribe import DiarizationResult, ProgressFn, WhisperTranscriber, diarize, is_media
 
 OTHERS = "Others"
@@ -42,6 +43,7 @@ class Outcome:
     diarization: DiarizationResult | None = None
     audio_kept: list[Path] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    kind: str = "transcribed"  # or "ingested" - changes only how it is reported
 
     @property
     def project(self) -> str:
@@ -90,8 +92,9 @@ def transcribe_file(
         raise SaidsoError(f"No such recording: {source}")
     if not is_media(source):
         raise SaidsoError(
-            f"{source.name} isn't a recognised audio or video file. To parse an "
-            "existing transcript instead, use `saidso ingest`."
+            f"{source.name} isn't a recognised audio or video file.\n"
+            "If it is already a transcript (.vtt, .docx, .md, .txt), bring it in with:\n"
+            f"  saidso ingest {source.name}"
         )
 
     route = routing.resolve(cfg, explicit=project, path=source)
@@ -136,6 +139,74 @@ def transcribe_file(
         outcome.notes.append(route.note)
     if diarization is not None and not diarization.applied:
         outcome.notes.append(f"Speaker labels skipped — {diarization.reason}.")
+    return outcome
+
+
+def ingest_file(
+    cfg: Config,
+    source: Path,
+    *,
+    project: str | None = None,
+    title: str | None = None,
+    when: dt.datetime | None = None,
+    link: str = "",
+    participants: list[str] | None = None,
+) -> Outcome:
+    """Bring an existing transcript into the inbox, normalised and routed.
+
+    The third way material arrives, after live recording and a media file: a
+    transcript someone else's tool already produced — the .vtt or .docx a
+    meeting platform hands you. Those need no transcription, but they do need
+    everything else, and without this they have no way in at all.
+
+    The dialogue is rewritten in saidso's own shape with proper frontmatter, so
+    a transcript that came from an export is indistinguishable downstream from
+    one saidso recorded. The original file is left exactly where it is —
+    ingesting someone's file is not a reason to move it.
+    """
+    source = Path(source)
+    if not source.exists():
+        raise SaidsoError(f"No such transcript: {source}")
+
+    result = parse_file(source)
+
+    # A transcript's own frontmatter can name its project; the filename is the
+    # fallback. Both run through the same routing as everything else.
+    meta_block = read_meta(source) if source.suffix.lower() in (".md", ".markdown", ".txt") else {}
+    route = routing.resolve(cfg, explicit=project, path=source, meta=meta_block)
+    guess = dating.resolve(source, given=when)
+
+    declared = str(meta_block.get("title") or "").strip()
+    meta = TranscriptMeta(
+        title=title or declared or naming.title_from_path(source),
+        when=guess.when,
+        source=source.name,
+        project=route.project.key,
+        link=link,
+        participants=list(participants or []),
+        date_source=guess.source,
+    )
+
+    basename = naming.build_basename(title=meta.title, when=meta.when, project=route.project.key)
+    claimed = naming.claim(cfg.inbox_dir, basename, ".md")
+    write_dialogue(result.utterances, claimed, meta)
+
+    outcome = Outcome(
+        transcript=claimed,
+        meta=meta,
+        route=route,
+        segments=len(result.utterances),
+        kind="ingested",
+    )
+    if guess.inferred:
+        outcome.notes.append(f"Date {guess.explanation}.")
+    if route.note:
+        outcome.notes.append(route.note)
+    if not result.attributed:
+        outcome.notes.append(
+            "No speaker structure in the source, so nothing can be attributed — "
+            "the dialogue is kept as one block."
+        )
     return outcome
 
 

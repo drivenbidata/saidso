@@ -6,10 +6,12 @@ from . import frontmatter, naming, routing
 from .markdown import (
     build_frontmatter,
     read_meta,
+    render_dialogue,
     render_transcript,
     render_vtt,
     speakers_of,
     write_atomic,
+    write_dialogue,
     write_transcript,
     write_vtt,
 )
@@ -25,6 +27,7 @@ __all__ = [
     "frontmatter",
     "naming",
     "read_meta",
+    "render_dialogue",
     "render_transcript",
     "render_vtt",
     "resolve_project",
@@ -32,6 +35,7 @@ __all__ = [
     "slugify",
     "speakers_of",
     "write_atomic",
+    "write_dialogue",
     "write_transcript",
     "write_vtt",
 ]

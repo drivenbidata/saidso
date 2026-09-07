@@ -52,7 +52,9 @@ Both use the same synthesis rules. Only the file handling differs.
    ```
 
    Transcripts arrive as `.md` (saidso's own output), or `.vtt`, `.docx` and
-   `.txt` from meeting platforms. **A `.md` file in `inbox/` is a raw
+   `.txt` from meeting platforms. If the user has an export sitting outside the
+   inbox, `saidso ingest <file>` files it properly — routed, dated and with
+   full frontmatter — rather than copying it in by hand. **A `.md` file in `inbox/` is a raw
    transcript, not a finished note.** Leave anything that clearly isn't a
    transcript where it is. If the inbox is empty, say so and stop — don't
    invent work.

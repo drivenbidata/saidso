@@ -17,6 +17,7 @@ from pathlib import Path
 from . import __version__, paths
 from . import config as config_mod
 from .errors import SaidsoError
+from .parse import SUPPORTED_SUFFIXES as TRANSCRIPT_SUFFIXES
 from .transcribe import MODELS, is_media
 
 EPILOG = """\
@@ -25,6 +26,7 @@ examples:
   saidso devices                               list microphones and system-audio inputs
   saidso record --name "Weekly Sync"           record a meeting, transcribe on stop
   saidso transcribe meeting.mp4                transcribe a recording file
+  saidso ingest teams-export.vtt               file an existing transcript
   saidso watch ~/Downloads/recordings          transcribe anything dropped in a folder
   saidso parse transcript.vtt                  print a clean Speaker: text log
   saidso tracker sweep                         move ticked items into Completed
@@ -85,7 +87,8 @@ def _report(outcome, cfg) -> None:
     # A transcript written outside the notes directory keeps its absolute path.
     with contextlib.suppress(ValueError):
         rel = outcome.transcript.relative_to(cfg.notes_dir)
-    _out(f"  -> {rel}  ({outcome.segments} segments, project: {outcome.project})")
+    unit = "turns" if outcome.kind == "ingested" else "segments"
+    _out(f"  -> {rel}  ({outcome.segments} {unit}, project: {outcome.project})")
     if outcome.vtt:
         _out(f"     also wrote {outcome.vtt.name}")
     for note in outcome.notes:
@@ -221,6 +224,42 @@ def cmd_transcribe(args: argparse.Namespace) -> int:
             _report(outcome, cfg)
         except SaidsoError as e:
             _finish_progress(args.quiet)
+            _err(f"  failed: {e}")
+            failures += 1
+    return 1 if failures else 0
+
+
+def cmd_ingest(args: argparse.Namespace) -> int:
+    from .pipeline import ingest_file
+
+    cfg = _load(args)
+    targets: list[Path] = []
+    for raw in args.paths:
+        path = Path(raw)
+        if path.is_dir():
+            targets += sorted(p for p in path.iterdir() if p.suffix.lower() in TRANSCRIPT_SUFFIXES)
+        elif path.exists():
+            targets.append(path)
+        else:
+            _err(f"Not found: {path}")
+
+    if not targets:
+        _err("Nothing to ingest.")
+        return 1
+
+    when = dt.datetime.fromisoformat(args.date) if args.date else None
+    failures = 0
+    for path in targets:
+        _out(f"{path.name}")
+        try:
+            _report(
+                ingest_file(
+                    cfg, path, project=args.project, title=args.title, when=when,
+                    link=args.link or "", participants=_participants(args.participants),
+                ),
+                cfg,
+            )
+        except SaidsoError as e:
             _err(f"  failed: {e}")
             failures += 1
     return 1 if failures else 0
@@ -425,6 +464,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("paths", nargs="+", metavar="PATH", help="files or folders")
     p.add_argument("--title", metavar="TITLE", help="meeting title (defaults to the filename)")
     p.set_defaults(func=cmd_transcribe)
+
+    p = sub.add_parser(
+        "ingest", parents=[common], help="bring an existing transcript into the inbox"
+    )
+    p.add_argument("paths", nargs="+", metavar="PATH", help=".vtt, .docx, .md or .txt, or folders")
+    p.add_argument("--project", metavar="KEY", help="file it under this project")
+    p.add_argument("--title", metavar="TITLE", help="meeting title (defaults to the filename)")
+    p.add_argument("--date", metavar="YYYY-MM-DD", help="the meeting date, if the file lacks one")
+    p.add_argument("--link", metavar="URL", help="meeting link, recorded in the frontmatter")
+    p.add_argument("--participants", metavar="LIST", help="names or emails, comma separated")
+    p.set_defaults(func=cmd_ingest)
 
     p = sub.add_parser("watch", parents=[common], help="transcribe anything dropped in a folder")
     p.add_argument("folder", nargs="?", metavar="DIR", help="folder to watch")

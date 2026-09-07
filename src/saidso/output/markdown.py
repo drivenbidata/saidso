@@ -20,7 +20,7 @@ import os
 from pathlib import Path
 
 from .. import __version__
-from ..models import Segment, TranscriptMeta, format_timestamp
+from ..models import Segment, TranscriptMeta, Utterance, format_timestamp
 from . import frontmatter as fm
 
 BLOCK_LISTS = ("participants",)
@@ -41,15 +41,28 @@ def speakers_of(segments: list[Segment]) -> list[str]:
 
 
 def build_frontmatter(meta: TranscriptMeta, segments: list[Segment]) -> dict[str, object]:
+    return _frontmatter(meta, speakers_of(segments), _duration_text(meta, segments))
+
+
+def _frontmatter(
+    meta: TranscriptMeta, speakers: list[str], duration: str
+) -> dict[str, object]:
+    """The frontmatter block, shared by everything that writes a transcript.
+
+    One builder for both timed transcripts and ingested ones, so a file that
+    came from a meeting export carries exactly the same fields as one saidso
+    recorded itself. Downstream — routing, agents, search — cannot tell them
+    apart, which is the point.
+    """
     data: dict[str, object] = {
         "title": meta.title,
         "date": meta.date,
         "recorded": meta.when,
         "project": meta.project,
         "source": meta.source,
-        "duration": _duration_text(meta, segments),
+        "duration": duration,
         "language": meta.language or "",
-        "speakers": speakers_of(segments),
+        "speakers": speakers,
         "participants": list(meta.participants),
         "link": meta.link,
     }
@@ -86,6 +99,43 @@ def render_transcript(segments: list[Segment], meta: TranscriptMeta) -> str:
             lines.append(f"[{stamp}] {text}")
     lines.append("")
     return "\n".join(lines)
+
+
+def render_dialogue(utterances: list[Utterance], meta: TranscriptMeta) -> str:
+    """A transcript from a source that had no usable timing.
+
+    Meeting-platform exports carry timestamps, but they describe cue
+    boundaries rather than turns, and they are dropped during parsing along
+    with the rest of the formatting. Rather than invent times that would look
+    authoritative and be wrong, this writes the dialogue without them.
+
+    Everything else matches a recorded transcript exactly: same frontmatter,
+    same one-line-per-turn shape, same heading.
+    """
+    speakers = []
+    for u in utterances:
+        if u.speaker and u.speaker not in speakers:
+            speakers.append(u.speaker)
+
+    lines = [fm.dumps(_frontmatter(meta, speakers, ""), block_lists=BLOCK_LISTS), ""]
+    lines.append(f"# {meta.title} — Raw Transcript")
+    if meta.date_inferred:
+        lines.append("")
+        lines.append(
+            f"*Date {meta.date.isoformat()} was inferred from the {meta.date_source}, "
+            "not stated in the recording. Please confirm before relying on it.*"
+        )
+    lines.append("")
+    for u in utterances:
+        text = " ".join(u.text.split())
+        if text:
+            lines.append(f"**{u.speaker}:** {text}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def write_dialogue(utterances: list[Utterance], path: Path, meta: TranscriptMeta) -> Path:
+    return write_atomic(Path(path), render_dialogue(utterances, meta))
 
 
 def render_vtt(segments: list[Segment], meta: TranscriptMeta) -> str:
