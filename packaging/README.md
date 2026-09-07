@@ -56,7 +56,7 @@ startup — which also hides them from the analysis.
 Worth knowing before changing `engine_entry.py`, because the failure gives you
 nothing to go on.
 
-saidso imports faster-whisper **lazily**, so the CLI starts fast and a missing
+SaidSo imports faster-whisper **lazily**, so the CLI starts fast and a missing
 optional dependency degrades cleanly instead of breaking startup. In a frozen
 build that backfires: the first import then happens on a *worker thread*, when
 a transcription is requested — and loading numpy's native extension from a
@@ -107,7 +107,7 @@ once signing exists:
   of this repository's workflow at a particular commit:
 
   ```bash
-  gh attestation verify saidso-setup.exe --repo drivenbidata/saidso
+  gh attestation verify SaidSo-setup.exe --repo drivenbidata/saidso
   ```
 
 Neither stops the operating system warning — only a certificate does that. They

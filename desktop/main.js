@@ -1,6 +1,6 @@
-// saidso desktop — the Electron shell.
+// SaidSo desktop — the Electron shell.
 //
-// This process owns the saidso engine and nothing else owns anything. It starts
+// This process owns the SaidSo engine and nothing else owns anything. It starts
 // the engine on an ephemeral port, reads the port and token from the handshake
 // line the engine prints on stdout, and proxies every request from the
 // renderer. The renderer never sees the token and never gets Node access, so
@@ -79,7 +79,7 @@ function startEngine() {
     if (!found) {
       reject(
         new Error(
-          "No saidso engine found.\n\n" +
+          "No SaidSo engine found.\n\n" +
             "A packaged build ships one. Running from source needs either\n" +
             "  npm run build:engine      (builds a frozen engine into dist/)\n" +
             "or a Python that can import saidso:\n" +
@@ -105,7 +105,7 @@ function startEngine() {
       if (settled) return;
       settled = true;
       proc.kill();
-      reject(new Error("The saidso engine didn't start within 20 seconds."));
+      reject(new Error("The SaidSo engine didn't start within 20 seconds."));
     }, START_TIMEOUT_MS);
 
     proc.stdout.on("data", (chunk) => {
@@ -142,7 +142,7 @@ function startEngine() {
       if (!settled) {
         settled = true;
         clearTimeout(timer);
-        reject(new Error(`The saidso engine exited with code ${code} before starting.`));
+        reject(new Error(`The SaidSo engine exited with code ${code} before starting.`));
       } else if (!app.isQuitting) {
         setStatus({ state: "stopped", code });
       }
@@ -220,7 +220,7 @@ function createWindow() {
     height: 760,
     minWidth: 720,
     minHeight: 560,
-    title: "saidso",
+    title: "SaidSo",
     backgroundColor: "#14161a",
     show: false,
     webPreferences: {

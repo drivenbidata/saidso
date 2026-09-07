@@ -1,4 +1,4 @@
-"""saidso — record, transcribe and organise meetings on your own machine.
+"""SaidSo — record, transcribe and organise meetings on your own machine.
 
 The package is layered so each piece is usable on its own:
 

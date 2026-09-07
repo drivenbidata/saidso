@@ -1,9 +1,9 @@
-# saidso
+# SaidSo
 
 Record your meetings, transcribe them, and file the transcripts where you can
 find them again — entirely on your own machine. Audio never leaves it.
 
-saidso captures your microphone and your system audio as two separate tracks,
+SaidSo captures your microphone and your system audio as two separate tracks,
 transcribes both locally with Whisper, and writes one clean markdown transcript
 per meeting into a folder you control. Turning those transcripts into meeting
 notes is left to an agent of your choosing; see [agent-pack/](agent-pack/).
@@ -23,7 +23,7 @@ only to split the *other* track into individuals.
 
 **Rules in code, judgement in a model.** Naming a file, deciding which project
 a transcript belongs to, stamping a completion date, rebuilding an index — all
-rules, and they live in saidso where they run identically every time. Deciding
+rules, and they live in SaidSo where they run identically every time. Deciding
 what counts as a decision, who owns an action item, or whether two people
 actually disagreed is reading comprehension, and that lives in a prompt you can
 swap. The line between them is deliberate.
@@ -31,7 +31,7 @@ swap. The line between them is deliberate.
 **Guesses are labelled as guesses.** A date taken from a filename is a fact. A
 date taken from a file's modification time is a guess — for a downloaded
 transcript it is the download date, not the meeting date, and a whole batch
-downloaded together will share one. saidso writes `date_inferred: true` when
+downloaded together will share one. SaidSo writes `date_inferred: true` when
 it had to guess, and says so on the way past.
 
 ## Install
@@ -65,7 +65,7 @@ with a SHA256SUMS file and a GitHub build provenance attestation, so you can
 confirm a binary is the one this repository's workflow built:
 
 ```bash
-gh attestation verify saidso-setup.exe --repo drivenbidata/saidso
+gh attestation verify SaidSo-setup.exe --repo drivenbidata/saidso
 ```
 
 ## Quick start
@@ -145,7 +145,7 @@ source: live recording
 duration: "00:47:12"
 language: en
 speakers: [Javi Gold, Speaker 1]
-generator: saidso 0.1.0
+generator: SaidSo 0.1.0
 ---
 
 # Weekly Sync — Raw Transcript
@@ -179,7 +179,7 @@ because nobody notices it.
 ## Action trackers
 
 Each project keeps a `Tracker.md` with `## Open` and `## Completed`. Your agent
-adds items under Open. You tick them off in any editor. saidso does the rest:
+adds items under Open. You tick them off in any editor. SaidSo does the rest:
 
 ```bash
 saidso tracker sweep
@@ -205,15 +205,15 @@ remote = "origin"
 branch = "main"
 ```
 
-`saidso sync` pulls, stages only the paths saidso owns, and **refuses to commit
+`saidso sync` pulls, stages only the paths SaidSo owns, and **refuses to commit
 a deletion it didn't make**. That guard is the whole reason this feature is
-written the way it is: the pipeline saidso grew out of lost a meeting note to
+written the way it is: the pipeline SaidSo grew out of lost a meeting note to
 an unattended `git add -A` that ran before its pull, committing a file's
 absence as a deletion. Pulling first prevents the class; refusing surprise
 deletions catches the rest. Set `allow_deletions = true` if you genuinely
 delete notes and want that mirrored.
 
-saidso never writes credentials to disk. Whatever git already uses for that
+SaidSo never writes credentials to disk. Whatever git already uses for that
 repository is what it uses.
 
 ## Turning transcripts into notes
@@ -283,7 +283,7 @@ Microsoft Store build of Python, which puts scripts under
 Find it with `python -c "import sysconfig; print(sysconfig.get_path('scripts', 'nt_user'))"`,
 or skip the problem entirely with `python -m saidso.cli …`.
 
-**The desktop app says "No saidso engine found"**
+**The desktop app says "No SaidSo engine found"**
 You are running from source without an engine. Either build one
 (`npm run build:engine`) or install the package so some Python can import it
 (`pip install "saidso[all]"`). If the wrong interpreter is first on your `PATH`,

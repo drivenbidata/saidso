@@ -25,8 +25,9 @@ if (!fs.existsSync(ENGINE)) {
 
 module.exports = {
   packagerConfig: {
-    name: "saidso",
-    executableName: process.platform === "win32" ? "saidso" : "saidso",
+    name: "SaidSo",
+    // Lowercase on Linux, where executables conventionally are; branded elsewhere.
+    executableName: process.platform === "linux" ? "saidso" : "SaidSo",
     asar: true,
     extraResource: [ENGINE],
     prune: true,
@@ -38,13 +39,13 @@ module.exports = {
       name: "@electron-forge/maker-squirrel",
       platforms: ["win32"],
       config: {
-        name: "saidso",
+        name: "SaidSo",
         // Squirrel builds a NuGet package underneath, and these are required
         // there — the build otherwise fails at the very last step, after the
         // whole app has been packaged.
         authors: "JaviGold",
         description: "Record, transcribe and organise meetings on your own machine.",
-        setupExe: "saidso-setup.exe",
+        setupExe: "SaidSo-setup.exe",
         noMsi: true,
       },
     },

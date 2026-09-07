@@ -1,4 +1,4 @@
-"""The `saidso` command line.
+"""The SaidSo command line.
 
 Every capability is reachable here, and the desktop shell drives the same
 functions rather than reimplementing them — so anything you can do in the

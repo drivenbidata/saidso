@@ -1,6 +1,6 @@
 # agent-pack
 
-saidso stops at a clean, well-named, correctly filed transcript. Turning that
+SaidSo stops at a clean, well-named, correctly filed transcript. Turning that
 into a meeting note takes reading comprehension, so it is left to an agent you
 choose — and this folder is what you give it.
 
@@ -22,7 +22,7 @@ happened the first time this was installed.
 Two reasons, and the second is the real one.
 
 Summarisation quality is the whole value of a meeting note, and it moves fast.
-Pinning saidso to one provider would date the tool and force an API key on
+Pinning SaidSo to one provider would date the tool and force an API key on
 people who installed it precisely because their audio never leaves the machine.
 
 More importantly, the split is honest about where judgement lives. Deciding
@@ -30,7 +30,7 @@ what counts as a decision, who owns an action, and whether two people actually
 disagreed is reading comprehension. Naming a file, resolving a project,
 stamping a completed date and rebuilding an index are rules. Rules belong in
 code, where they run identically every time; judgement belongs to a model you
-can swap. Everything in saidso proper is on the rules side of that line.
+can swap. Everything in SaidSo proper is on the rules side of that line.
 
 ## Using it with Claude Code
 
@@ -42,7 +42,7 @@ cp -r agent-pack/skills/saidso-meeting-notes ~/.claude/skills/
 
 Then say "process the inbox". The skill drives the `saidso` CLI — `saidso
 parse`, `saidso projects`, `saidso tracker add`, `saidso sync` — rather than
-reaching into your files directly, so it stays correct as saidso changes.
+reaching into your files directly, so it stays correct as SaidSo changes.
 
 ## Using it with anything else
 
@@ -63,7 +63,7 @@ tracker add`, and move the raw file to `processed/`.
 
 ## The one rule for whatever you build
 
-Let saidso own `## Completed` and the root index. `saidso tracker sweep` moves
+Let SaidSo own `## Completed` and the root index. `saidso tracker sweep` moves
 ticked items across with the correct date and attribution, drops finished
 meetings, validates the result, and refuses to write anything that doesn't
 validate. An agent writing those sections directly loses all of that.

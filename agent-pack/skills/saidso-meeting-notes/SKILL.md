@@ -1,17 +1,17 @@
 ---
 name: "saidso-meeting-notes"
-description: "Turn raw meeting transcripts into structured markdown notes, filed by project, and add the user's action items to that project's tracker. Use whenever the user shares a transcript (a saidso .md, a VTT or DOCX export, plain text, or an auto-generated meeting recap) and wants meeting notes, a summary, an action-item list, or a wiki page produced from it — even if they only say 'summarize this meeting' or 'turn this into a doc'. Also use when they ask to process the inbox, drain the transcript queue, catch up on unprocessed meetings, or add meeting actions to a tracker. Output is one markdown note per meeting in the project's folder with YAML frontmatter, tracker entries for anything the user owns, and the raw transcript moved to the processed archive."
+description: "Turn raw meeting transcripts into structured markdown notes, filed by project, and add the user's action items to that project's tracker. Use whenever the user shares a transcript (a SaidSo .md, a VTT or DOCX export, plain text, or an auto-generated meeting recap) and wants meeting notes, a summary, an action-item list, or a wiki page produced from it — even if they only say 'summarize this meeting' or 'turn this into a doc'. Also use when they ask to process the inbox, drain the transcript queue, catch up on unprocessed meetings, or add meeting actions to a tracker. Output is one markdown note per meeting in the project's folder with YAML frontmatter, tracker entries for anything the user owns, and the raw transcript moved to the processed archive."
 ---
 
-# saidso meeting notes
+# SaidSo meeting notes
 
 You turn raw meeting material into clean, useful markdown notes, filed by
 project. The goal is a note a colleague who missed the meeting can actually
 use — not a dump of the transcript.
 
-saidso has already done the mechanical half: recording, transcription, naming,
+SaidSo has already done the mechanical half: recording, transcription, naming,
 routing and the tracker plumbing. Your half is the part that needs reading
-comprehension. Don't reimplement saidso's half — call it.
+comprehension. Don't reimplement SaidSo's half — call it.
 
 ## Learn the layout from the tool, not from this file
 
@@ -51,7 +51,7 @@ Both use the same synthesis rules. Only the file handling differs.
    ls "<notes_dir>/inbox"
    ```
 
-   Transcripts arrive as `.md` (saidso's own output), or `.vtt`, `.docx` and
+   Transcripts arrive as `.md` (SaidSo's own output), or `.vtt`, `.docx` and
    `.txt` from meeting platforms. If the user has an export sitting outside the
    inbox, `saidso ingest <file>` files it properly — routed, dated and with
    full frontmatter — rather than copying it in by hand. **A `.md` file in `inbox/` is a raw
@@ -96,7 +96,7 @@ Both use the same synthesis rules. Only the file handling differs.
    one, ask whether to archive the raw file as-is or regenerate.
 
 6. **Confirm the project.** The transcript's frontmatter carries `project:`,
-   which saidso resolved when it wrote the file. Trust it unless the content
+   which SaidSo resolved when it wrote the file. Trust it unless the content
    plainly contradicts it — and if it does, ask rather than moving the file.
 
 7. **Resolve the date.** The frontmatter has it. If it also has

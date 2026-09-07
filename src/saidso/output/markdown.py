@@ -72,7 +72,7 @@ def _frontmatter(
         items = list(data.items())
         at = [k for k, _ in items].index("date") + 1
         data = dict(items[:at] + [("date_inferred", True), ("date_source", meta.date_source)] + items[at:])
-    data["generator"] = f"saidso {__version__}"
+    data["generator"] = f"SaidSo {__version__}"
     return data
 
 

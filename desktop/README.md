@@ -1,4 +1,4 @@
-# saidso desktop
+# SaidSo desktop
 
 An Electron shell over the same engine the CLI drives. It owns no logic of its
 own: it starts `python -m saidso.server` as a child process, reads the port and
