@@ -5,10 +5,17 @@ into a meeting note takes reading comprehension, so it is left to an agent you
 choose — and this folder is what you give it.
 
 ```
-skills/saidso-meeting-notes/SKILL.md   a Claude skill: the full workflow
-prompts/meeting-notes.md               provider-neutral system prompt
-templates/output-template.md           the note structure and frontmatter rules
+skills/saidso-meeting-notes/
+├── SKILL.md                      a Claude skill: the full workflow
+├── prompts/meeting-notes.md      provider-neutral system prompt
+└── templates/output-template.md  the note structure and frontmatter rules
 ```
+
+The prompt and template live *inside* the skill folder rather than beside it,
+because a Claude skill is installed by copying that one directory. Kept outside,
+`cp -r skills/saidso-meeting-notes ~/.claude/skills/` produced a skill whose own
+instructions pointed at files that were not there — which is exactly what
+happened the first time this was installed.
 
 ## Why this isn't built in
 
@@ -39,8 +46,9 @@ reaching into your files directly, so it stays correct as saidso changes.
 
 ## Using it with anything else
 
-Give the model `prompts/meeting-notes.md` as its system prompt and
-`templates/output-template.md` as the required output shape, then feed it:
+Give the model `skills/saidso-meeting-notes/prompts/meeting-notes.md` as its
+system prompt and `skills/saidso-meeting-notes/templates/output-template.md` as
+the required output shape, then feed it:
 
 ```bash
 saidso parse "<notes_dir>/inbox/2026-09-01_acme_Weekly-Sync.md"
