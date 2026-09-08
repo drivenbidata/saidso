@@ -14,6 +14,6 @@ here. saidso stops at a clean, well-named transcript in the inbox; an agent
 you choose reads it using the prompts in agent-pack/ — see its README.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 __all__ = ["__version__"]
