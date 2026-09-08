@@ -142,6 +142,192 @@ def transcribe_file(
     return outcome
 
 
+@dataclass(slots=True)
+class MergedTracks:
+    """The result of transcribing a mic track and a system track together."""
+
+    segments: list[Segment] = field(default_factory=list)
+    duration: float = 0.0
+    language: str | None = None
+    diarization: DiarizationResult | None = None
+
+
+def merge_tracks(
+    cfg: Config,
+    tracks: list[tuple[str, Path]],
+    *,
+    model: str | None = None,
+    diarize_audio: bool | None = None,
+    progress: ProgressFn | None = None,
+) -> MergedTracks:
+    """Transcribe labelled tracks and interleave them into one conversation.
+
+    `tracks` is a list of (label, path) where the label is "mic" or "system".
+    The mic track is you — it is your microphone, so no model is needed to know
+    that — and the system track is everyone else. Diarisation, when enabled, is
+    applied only to the system track, to split "Others" into individuals.
+
+    Shared by live recording and by transcribing a saved mic/system pair, so
+    the two cannot drift: a pair of files off disk produces exactly the
+    transcript the same meeting would have produced live.
+    """
+    me = cfg.speaker_name.strip() or "Me"
+    transcriber = _transcriber(cfg, model)
+    diarize_wanted = cfg.transcribe.diarize if diarize_audio is None else diarize_audio
+
+    out = MergedTracks()
+    for label, path in tracks:
+        if progress:
+            progress(None, f"Transcribing {label} track")
+        result = transcriber.transcribe(
+            path, language=cfg.transcribe.language or None, progress=progress
+        )
+        if not result.segments:
+            continue
+        if label == "system":
+            if diarize_wanted:
+                out.diarization = diarize(path, result.segments)
+            for s in result.segments:
+                if not s.speaker:
+                    s.speaker = OTHERS
+        else:
+            for s in result.segments:
+                s.speaker = me
+        out.segments += result.segments
+        out.duration = max(out.duration, result.duration or 0.0)
+        out.language = out.language or result.language
+
+    # Both tracks start at zero because they were recorded together, so sorting
+    # by start time is what reassembles the conversation in order.
+    out.segments.sort(key=lambda s: s.start)
+    return out
+
+
+# How a recorder names the two halves of one meeting. saidso writes `_mic` and
+# `_system`; the others are here because real folders contain them.
+MIC_MARKERS = ("_mic", "-mic")
+SYSTEM_MARKERS = ("_system", "-system", "_speakers", "-speakers", "_sys")
+
+
+def _track_role(stem: str) -> tuple[str, str] | None:
+    """Split a filename stem into (shared base, role), or None if unpaired."""
+    lowered = stem.lower()
+    for marker in MIC_MARKERS:
+        if lowered.endswith(marker):
+            return stem[: -len(marker)], "mic"
+    for marker in SYSTEM_MARKERS:
+        if lowered.endswith(marker):
+            return stem[: -len(marker)], "system"
+    return None
+
+
+def find_pairs(paths: list[Path]) -> tuple[list[tuple[Path, Path]], list[Path]]:
+    """Group mic/system recordings of the same meeting.
+
+    Returns (pairs as (mic, system), everything left over). Two files pair only
+    when their names are identical apart from the role suffix — a `_mic` with no
+    matching `_system` is just a recording, and is left alone rather than
+    guessed at.
+    """
+    halves: dict[str, dict[str, Path]] = {}
+    order: list[str] = []
+    singles: list[Path] = []
+
+    for path in paths:
+        split = _track_role(path.stem)
+        if split is None:
+            singles.append(path)
+            continue
+        base, role = split
+        key = f"{base.lower()}|{path.parent}"
+        if key not in halves:
+            halves[key] = {}
+            order.append(key)
+        # A second file in the same role is a different recording, not a pair.
+        if role in halves[key]:
+            singles.append(path)
+        else:
+            halves[key][role] = path
+
+    pairs: list[tuple[Path, Path]] = []
+    for key in order:
+        found = halves[key]
+        if "mic" in found and "system" in found:
+            pairs.append((found["mic"], found["system"]))
+        else:
+            singles += list(found.values())
+    return pairs, singles
+
+
+def transcribe_pair(
+    cfg: Config,
+    mic: Path,
+    system: Path,
+    *,
+    project: str | None = None,
+    title: str | None = None,
+    when: dt.datetime | None = None,
+    link: str = "",
+    participants: list[str] | None = None,
+    model: str | None = None,
+    diarize_audio: bool | None = None,
+    progress: ProgressFn | None = None,
+) -> Outcome:
+    """Transcribe a saved mic/system pair as one meeting."""
+    mic, system = Path(mic), Path(system)
+    for path in (mic, system):
+        if not path.exists():
+            raise SaidsoError(f"No such recording: {path}")
+
+    # Route and date from the shared part of the name, so the transcript is not
+    # called "Meeting mic".
+    base = mic.with_name(_track_role(mic.stem)[0].rstrip("_- ") + mic.suffix)
+    route = routing.resolve(cfg, explicit=project, path=base)
+    guess = dating.resolve(mic, given=when)
+
+    merged = merge_tracks(
+        cfg, [("mic", mic), ("system", system)],
+        model=model, diarize_audio=diarize_audio, progress=progress,
+    )
+    if not merged.segments:
+        raise SaidsoError(f"No speech detected in {mic.name} or {system.name}.")
+
+    meta = TranscriptMeta(
+        title=title or naming.title_from_path(base),
+        when=guess.when,
+        source=f"{mic.name} + {system.name}",
+        project=route.project.key,
+        duration=merged.duration,
+        language=merged.language,
+        link=link,
+        participants=list(participants or []),
+        date_source=guess.source,
+    )
+    transcript, vtt_path = _write(cfg, merged.segments, meta, route)
+
+    outcome = Outcome(
+        transcript=transcript,
+        meta=meta,
+        route=route,
+        segments=len(merged.segments),
+        vtt=vtt_path,
+        diarization=merged.diarization,
+        kind="paired",
+    )
+    outcome.notes.append(
+        f"Combined two tracks: you from {mic.name}, everyone else from {system.name}."
+    )
+    if guess.inferred:
+        outcome.notes.append(f"Date {guess.explanation}.")
+    if route.note:
+        outcome.notes.append(route.note)
+    if merged.diarization is not None and not merged.diarization.applied:
+        outcome.notes.append(
+            f"Other participants are labelled '{OTHERS}' — {merged.diarization.reason}."
+        )
+    return outcome
+
+
 def ingest_file(
     cfg: Config,
     source: Path,
@@ -278,65 +464,42 @@ class LiveSession:
                 "devices are the right ones (`saidso devices`)."
             )
 
-        me = self.cfg.speaker_name.strip() or "Me"
-        transcriber = _transcriber(self.cfg, self.model)
-        segments: list[Segment] = []
-        duration = 0.0
-        language: str | None = None
-        diarization: DiarizationResult | None = None
-
-        for track in tracks:
-            if progress:
-                progress(None, f"Transcribing {track.label} track")
-            result = transcriber.transcribe(
-                track.path, language=self.cfg.transcribe.language or None, progress=progress
-            )
-            if not result.segments:
-                continue
-            if track.label == "system":
-                # Only the other participants need splitting apart.
-                if self.diarize_audio:
-                    diarization = diarize(track.path, result.segments)
-                for s in result.segments:
-                    if not s.speaker:
-                        s.speaker = OTHERS
-            else:
-                for s in result.segments:
-                    s.speaker = me
-            segments += result.segments
-            duration = max(duration, result.duration or 0.0)
-            language = language or result.language
-
-        if not segments:
+        merged = merge_tracks(
+            self.cfg,
+            [(track.label, track.path) for track in tracks],
+            model=self.model,
+            diarize_audio=self.diarize_audio,
+            progress=progress,
+        )
+        if not merged.segments:
             raise SaidsoError("No speech detected in the recording.")
-        segments.sort(key=lambda s: s.start)
 
         meta = TranscriptMeta(
             title=self.title,
             when=self.started_at,
             source="live recording",
             project=self.route.project.key,
-            duration=duration,
-            language=language,
+            duration=merged.duration,
+            language=merged.language,
             link=self.link,
             participants=self.participants,
             date_source="recorded",
         )
-        transcript, vtt_path = _write(self.cfg, segments, meta, self.route)
+        transcript, vtt_path = _write(self.cfg, merged.segments, meta, self.route)
 
         kept = self._handle_audio(tracks)
         outcome = Outcome(
             transcript=transcript,
             meta=meta,
             route=self.route,
-            segments=len(segments),
+            segments=len(merged.segments),
             vtt=vtt_path,
-            diarization=diarization,
+            diarization=merged.diarization,
             audio_kept=kept,
         )
-        if diarization is not None and not diarization.applied:
+        if merged.diarization is not None and not merged.diarization.applied:
             outcome.notes.append(
-                f"Other participants are labelled '{OTHERS}' — {diarization.reason}."
+                f"Other participants are labelled '{OTHERS}' — {merged.diarization.reason}."
             )
         return outcome
 

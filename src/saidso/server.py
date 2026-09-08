@@ -333,26 +333,39 @@ class Engine:
         return {"cancelled": True}
 
     def transcribe(self, body: dict[str, Any]) -> dict[str, Any]:
-        from .pipeline import transcribe_file
+        from .pipeline import find_pairs, transcribe_file, transcribe_pair
 
         paths = [Path(p) for p in body.get("paths") or []]
         if not paths:
             raise SaidsoError("No files given.")
         cfg = self.config()
         project = body.get("project") or None
+        # Selecting both halves of a recording in the file picker should give
+        # one meeting, exactly as recording it live would have.
+        pairs, singles = find_pairs(paths)
+        total = len(pairs) + len(singles)
 
         def work():
             results = []
-            for i, path in enumerate(paths, 1):
+            done = 0
+            for mic, system in pairs:
+                done += 1
                 self.events.emit("progress", fraction=None,
-                                 message=f"{path.name} ({i} of {len(paths)})")
+                                 message=f"{mic.name} + {system.name} ({done} of {total})")
+                results.append(_outcome(transcribe_pair(
+                    cfg, mic, system, project=project, progress=self._progress()
+                )))
+            for path in singles:
+                done += 1
+                self.events.emit("progress", fraction=None,
+                                 message=f"{path.name} ({done} of {total})")
                 results.append(_outcome(transcribe_file(
                     cfg, path, project=project, progress=self._progress()
                 )))
             return results
 
         self._run("transcribe", work)
-        return {"started": True, "count": len(paths)}
+        return {"started": True, "count": total, "paired": len(pairs)}
 
     def sweep(self) -> dict[str, Any]:
         from . import tracker

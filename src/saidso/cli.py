@@ -26,6 +26,7 @@ examples:
   saidso devices                               list microphones and system-audio inputs
   saidso record --name "Weekly Sync"           record a meeting, transcribe on stop
   saidso transcribe meeting.mp4                transcribe a recording file
+  saidso transcribe call_mic.wav call_system.wav   combine two tracks into one
   saidso ingest teams-export.vtt               file an existing transcript
   saidso watch ~/Downloads/recordings          transcribe anything dropped in a folder
   saidso parse transcript.vtt                  print a clean Speaker: text log
@@ -189,7 +190,7 @@ def cmd_record(args: argparse.Namespace) -> int:
 
 
 def cmd_transcribe(args: argparse.Namespace) -> int:
-    from .pipeline import transcribe_file
+    from .pipeline import find_pairs, transcribe_file, transcribe_pair
 
     cfg = _load(args)
     targets: list[Path] = []
@@ -206,8 +207,31 @@ def cmd_transcribe(args: argparse.Namespace) -> int:
         _err("Nothing to transcribe.")
         return 1
 
+    # A mic and a system recording of the same meeting are two halves of one
+    # conversation, not two meetings, unless the user says otherwise.
+    pairs, singles = ([], targets) if args.no_pair else find_pairs(targets)
+
     failures = 0
-    for path in targets:
+    for mic, system in pairs:
+        _out(f"{mic.name} + {system.name}")
+        try:
+            _report(
+                transcribe_pair(
+                    cfg, mic, system,
+                    project=args.project, title=args.title, model=args.model,
+                    diarize_audio=True if args.diarize else (False if args.no_diarize else None),
+                    link=args.link or "", participants=_participants(args.participants),
+                    progress=_progress(args.quiet),
+                ),
+                cfg,
+            )
+            _finish_progress(args.quiet)
+        except SaidsoError as e:
+            _finish_progress(args.quiet)
+            _err(f"  failed: {e}")
+            failures += 1
+
+    for path in singles:
         _out(f"{path.name}")
         try:
             outcome = transcribe_file(
@@ -482,6 +506,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("transcribe", parents=[common, media], help="transcribe recording file(s)")
     p.add_argument("paths", nargs="+", metavar="PATH", help="files or folders")
     p.add_argument("--title", metavar="TITLE", help="meeting title (defaults to the filename)")
+    p.add_argument(
+        "--no-pair",
+        action="store_true",
+        help="transcribe every file separately, even matching _mic/_system recordings",
+    )
     p.set_defaults(func=cmd_transcribe)
 
     p = sub.add_parser(
