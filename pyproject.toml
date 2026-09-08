@@ -4,7 +4,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "saidso"
-version = "0.1.0"
+# Read from the package rather than repeated here: two copies of a version
+# number drift, and the one people see is whichever they happened to look at.
+dynamic = ["version"]
 description = "Record, transcribe and organise meetings on your own machine. Audio never leaves it."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -50,6 +52,9 @@ saidso = "saidso.cli:main"
 Homepage = "https://github.com/drivenbidata/saidso"
 Source = "https://github.com/drivenbidata/saidso"
 Issues = "https://github.com/drivenbidata/saidso/issues"
+
+[tool.hatch.version]
+path = "src/saidso/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/saidso"]
