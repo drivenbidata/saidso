@@ -99,6 +99,21 @@
         </div>
 
         <div class="setting">
+          <label for="mic-select">Microphone</label>
+          <select id="mic-select"></select>
+          <p class="hint">Your voice. Recorded as its own track and tagged with your name.</p>
+        </div>
+
+        <div class="setting">
+          <label for="system-select">System audio</label>
+          <select id="system-select"></select>
+          <p class="hint">
+            Everyone else — whatever the machine plays. This must be the output
+            your calls actually come through, or you will record only yourself.
+          </p>
+        </div>
+
+        <div class="setting">
           <label for="speaker-name">Your name</label>
           <div class="setting-row">
             <input id="speaker-name" type="text" placeholder="e.g. Javi Gold" autocomplete="off" />

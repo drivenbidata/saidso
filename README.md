@@ -244,8 +244,9 @@ what each needs.
 
 ## Configuration
 
-One TOML file. The desktop app can change the notes folder and your speaker
-name directly; everything else is edited in the file.
+One TOML file. The desktop app can change the notes folder, your speaker name
+and the audio devices directly; everything else — the project list especially —
+is edited in the file, which the app's Project menu can open for you.
 
 `saidso config path` prints where it lives —
 `%APPDATA%\saidso\config.toml` on Windows, `~/.config/saidso/` on Linux,
@@ -296,10 +297,11 @@ right-click the app → *Open*. See [Verifying a download](#verifying-a-download
 for how to confirm a binary is genuine without a certificate.
 
 **Nothing was recorded, or only your own voice**
-Run `saidso devices` and check the system-audio entry is a **loopback** device.
-Loopback captures what the machine plays, which is everyone else on the call —
-without it you record only your microphone. Set `capture.system` in the config
-to a name fragment of the right device. Note that a loopback delivers nothing at
+Pick the right devices in the app's Settings panel, or run `saidso devices` and
+set `capture.mic` / `capture.system` in the config. The system-audio entry must
+be a **loopback** device: loopback captures what the machine plays, which is
+everyone else on the call — without it you record only your microphone. If your
+calls come through a headset, choose that headset's loopback, not the speakers. Note that a loopback delivers nothing at
 all while the machine is silent, so a recording made with everything muted is
 correctly empty rather than broken.
 

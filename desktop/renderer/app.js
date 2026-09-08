@@ -28,11 +28,17 @@ const els = {
   speakerName: $("speaker-name"),
   saveName: $("save-name"),
   configPath: $("config-path"),
+  micSelect: $("mic-select"),
+  systemSelect: $("system-select"),
 };
 
 let recording = false;
 let busy = false;
 let notesDir = "";
+let configPath = "";
+// The project select carries one entry that is an action rather than a project.
+const EDIT_PROJECTS = "__edit_projects__";
+let lastProject = "";
 let timerHandle = null;
 let startedAt = 0;
 
@@ -118,7 +124,8 @@ async function loadSettings() {
   notesDir = settings.notes_dir;
   els.revealNotes.hidden = false;
   els.notesDir.value = settings.notes_dir;
-  els.configPath.textContent = settings.config_path || "config.toml";
+  configPath = settings.config_path || "";
+  els.configPath.textContent = configPath || "config.toml";
   // Only overwrite the field when it isn't being edited, so a refresh mid-type
   // doesn't discard what someone is halfway through writing.
   if (document.activeElement !== els.speakerName) {
@@ -149,19 +156,83 @@ async function loadProjects() {
     option.selected = project.key === fallback;
     els.project.append(option);
   }
+
+  lastProject = els.project.value;
+
+  const edit = document.createElement("option");
+  edit.value = EDIT_PROJECTS;
+  edit.textContent = "Add or edit projects…";
+  els.project.append(edit);
 }
 
-async function loadDevices() {
+async function loadDevices(settings) {
   const devices = await api("GET", "/devices");
   if (!devices.available) {
     els.mic.textContent = els.sys.textContent = "unavailable";
     els.record.disabled = true;
+    els.micSelect.replaceChildren();
+    els.systemSelect.replaceChildren();
+    els.micSelect.disabled = true;
+    els.systemSelect.disabled = true;
     log(devices.reason.split("\n")[0], "bad");
     return;
   }
-  const pick = (list) => list.find((d) => d.is_default) || list[0];
-  els.mic.textContent = pick(devices.mics)?.name || "none found";
-  els.sys.textContent = pick(devices.system)?.name || "none found";
+  els.micSelect.disabled = false;
+  els.systemSelect.disabled = false;
+
+  fillDeviceSelect(els.micSelect, devices.mics, settings?.mic);
+  fillDeviceSelect(els.systemSelect, devices.system, settings?.system);
+
+  // Show what the engine would actually pick, not merely what is saved.
+  els.mic.textContent = resolveDevice(devices.mics, settings?.mic)?.name || "none found";
+  els.sys.textContent = resolveDevice(devices.system, settings?.system)?.name || "none found";
+}
+
+// Mirrors the engine's own rule: a saved name is a case-insensitive fragment,
+// and an empty one means the system default.
+function resolveDevice(list, saved) {
+  const wanted = (saved || "").trim().toLowerCase();
+  if (wanted) {
+    const match = list.find((d) => d.name.toLowerCase().includes(wanted));
+    if (match) return match;
+  }
+  return list.find((d) => d.is_default) || list[0];
+}
+
+function fillDeviceSelect(select, list, saved) {
+  const wanted = (saved || "").trim();
+  select.replaceChildren();
+
+  const auto = document.createElement("option");
+  auto.value = "";
+  auto.textContent = `System default (${list.find((d) => d.is_default)?.name || "none"})`;
+  auto.selected = !wanted;
+  select.append(auto);
+
+  // Stored by name, never by index: an index shifts the moment a headset is
+  // plugged in or a monitor wakes up, and a stale index records the wrong
+  // thing without saying so. Windows also lists the same device several times.
+  const seen = new Set();
+  for (const device of list) {
+    if (seen.has(device.name)) continue;
+    seen.add(device.name);
+    const option = document.createElement("option");
+    option.value = device.name;
+    option.textContent = device.name;
+    option.selected = wanted !== "" && device.name.toLowerCase().includes(wanted.toLowerCase());
+    select.append(option);
+  }
+
+  // A saved device that is not plugged in right now is kept and labelled,
+  // rather than silently reset to the default — unplugging a headset should
+  // not lose the choice.
+  if (wanted && ![...select.options].some((option) => option.selected)) {
+    const missing = document.createElement("option");
+    missing.value = wanted;
+    missing.textContent = `${wanted} (not connected)`;
+    missing.selected = true;
+    select.append(missing);
+  }
 }
 
 async function loadInbox() {
@@ -222,9 +293,9 @@ async function refreshAll() {
 
 async function doRefresh() {
   try {
-    await loadSettings();
+    const settings = await loadSettings();
     await loadProjects();
-    await loadDevices();
+    await loadDevices(settings);
     await loadInbox();
     const status = await api("GET", "/record/status");
     recording = status.recording;
@@ -316,6 +387,43 @@ els.saveName.addEventListener("click", async () => {
 
 els.speakerName.addEventListener("keydown", (event) => {
   if (event.key === "Enter") els.saveName.click();
+});
+
+els.micSelect.addEventListener("change", async () => {
+  const value = els.micSelect.value;
+  await saveSettings({ mic: value }, value ? `Microphone set to ${value}` : "Microphone follows the system default");
+  await refreshAll();
+});
+
+els.systemSelect.addEventListener("change", async () => {
+  const value = els.systemSelect.value;
+  await saveSettings(
+    { system: value },
+    value ? `System audio set to ${value}` : "System audio follows the system default"
+  );
+  await refreshAll();
+});
+
+// The last entry in the project list is an action, not a project: projects are
+// structural config, so adding one means editing the file rather than typing a
+// name into a box that would have to validate keys, folders and defaults.
+els.project.addEventListener("change", async () => {
+  if (els.project.value !== EDIT_PROJECTS) return;
+  els.project.value = lastProject;
+  if (!configPath) {
+    log("Don't know where the config lives yet — try Refresh.", "bad");
+    return;
+  }
+  const problem = await window.saidso.openPath(configPath);
+  if (problem) {
+    log(`Couldn't open ${configPath}: ${problem}`, "bad");
+    return;
+  }
+  log("Opened the config. Add a [[projects]] block, save, then press Refresh.");
+});
+
+els.project.addEventListener("input", () => {
+  if (els.project.value !== EDIT_PROJECTS) lastProject = els.project.value;
 });
 
 els.refresh.addEventListener("click", refreshAll);

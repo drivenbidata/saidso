@@ -271,6 +271,12 @@ ipcMain.handle("pick-folder", async (_event, current) => {
   return result.canceled ? null : result.filePaths[0];
 });
 
+ipcMain.handle("open-path", async (_event, target) => {
+  if (typeof target !== "string" || !target) return "no path";
+  // Opens in whatever the OS associates with .toml - an editor, usually.
+  return shell.openPath(target);
+});
+
 ipcMain.handle("reveal", (_event, target) => {
   if (typeof target === "string" && target) shell.showItemInFolder(target);
 });

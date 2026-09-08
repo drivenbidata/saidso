@@ -104,6 +104,26 @@ def test_settings_can_be_changed_from_the_window(engine, tmp_path):
     assert Path(_get(engine, "/settings")[1]["notes_dir"]) == target
 
 
+def test_capture_devices_are_settable_and_reported(engine):
+    """The window's only way to choose a microphone; there was none before."""
+    updated = _post(engine, "/settings", {"mic": "MX Brio", "system": "Realtek"})
+    assert updated["mic"] == "MX Brio"
+    assert updated["system"] == "Realtek"
+    assert _get(engine, "/settings")[1]["mic"] == "MX Brio"
+
+
+def test_clearing_a_device_means_the_system_default(engine):
+    _post(engine, "/settings", {"mic": "MX Brio"})
+    assert _post(engine, "/settings", {"mic": ""})["mic"] == ""
+
+
+def test_setting_one_device_leaves_the_other_alone(engine):
+    _post(engine, "/settings", {"mic": "MX Brio", "system": "Realtek"})
+    updated = _post(engine, "/settings", {"system": "Logitech"})
+    assert updated["system"] == "Logitech"
+    assert updated["mic"] == "MX Brio", "an unmentioned field must not be reset"
+
+
 def test_settings_rejects_values_that_would_break_the_config(engine, tmp_path):
     for bad in ({"notes_dir": "   "}, {"model": "enormous"}):
         with pytest.raises(urllib.error.HTTPError) as caught:

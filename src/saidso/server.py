@@ -169,6 +169,8 @@ class Engine:
             "model": cfg.transcribe.model,
             "diarize": cfg.transcribe.diarize,
             "flavor": cfg.output.flavor,
+            "mic": cfg.capture.mic,
+            "system": cfg.capture.system,
         }
 
     def update_settings(self, body: dict[str, Any]) -> dict[str, Any]:
@@ -210,6 +212,19 @@ class Engine:
             if model not in MODELS:
                 raise SaidsoError(f"Unknown model {model!r}. One of: {', '.join(MODELS)}")
             changed["transcribe"] = replace(cfg.transcribe, model=model)
+
+        # Devices are stored as a name fragment rather than an index, because
+        # indexes shift the moment a headset is plugged in or a monitor wakes up,
+        # and a stale index silently records the wrong thing. An empty value
+        # means "whatever Windows considers the default", which is the sane
+        # starting point and the only choice that survives new hardware.
+        capture_changes = {
+            key: str(body[key] or "").strip()
+            for key in ("mic", "system")
+            if key in body
+        }
+        if capture_changes:
+            changed["capture"] = replace(cfg.capture, **capture_changes)
 
         if not changed:
             return self.settings()

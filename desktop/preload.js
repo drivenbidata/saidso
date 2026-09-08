@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld("saidso", {
   // File.path was removed in Electron 32; this is the supported replacement.
   pathForFile: (file) => webUtils.getPathForFile(file),
   pickFolder: (current) => ipcRenderer.invoke("pick-folder", current),
+  openPath: (path) => ipcRenderer.invoke("open-path", path),
   reveal: (path) => ipcRenderer.invoke("reveal", path),
   onEvent: (handler) => {
     const listener = (_event, payload) => handler(payload);

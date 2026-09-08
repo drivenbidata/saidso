@@ -30,9 +30,18 @@ opening blank.
 
 The Settings panel writes to the same `config.toml` the CLI reads, so the two
 views can't diverge. It exposes only the fields a person can reasonably change
-from a window — the notes folder, your speaker name, the model — because a
-settings endpoint that can rewrite anything is one that can corrupt anything.
-The project list and the rest stay in the file.
+from a window — the notes folder, your speaker name, the microphone and the
+system-audio device — because a settings endpoint that can rewrite anything is
+one that can corrupt anything.
+
+Devices are stored as a **name fragment**, never an index: indexes shift the
+moment a headset is plugged in, and a stale index records the wrong thing
+without saying so. A saved device that is currently unplugged stays selected
+and is labelled "(not connected)" rather than being silently reset.
+
+The project list stays in the file, because a project is structural — a key, a
+folder, a tracker path and possibly the default. The Project menu's last entry
+opens the config rather than pretending a text box could validate all that.
 
 ## What the window cannot do yet
 
