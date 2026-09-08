@@ -22,6 +22,15 @@
     </header>
 
     <main>
+      <section id="config-problem" class="card problem" hidden>
+        <h2>Config problem</h2>
+        <pre id="config-problem-text"></pre>
+        <div class="problem-actions">
+          <button id="problem-open" class="secondary" type="button">Open config file</button>
+          <button id="problem-retry" class="secondary" type="button">Try again</button>
+        </div>
+      </section>
+
       <section class="card record" aria-labelledby="record-heading">
         <h2 id="record-heading">Record a meeting</h2>
 
@@ -125,9 +134,12 @@
           </p>
         </div>
 
-        <p class="hint config-path">
-          Everything else lives in <code id="config-path">config.toml</code>.
-        </p>
+        <div class="config-path">
+          <p class="hint">
+            Everything else lives in <code id="config-path">config.toml</code>.
+          </p>
+          <button id="open-config" class="secondary" type="button">Open config file</button>
+        </div>
       </section>
     </main>
 

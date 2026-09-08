@@ -299,3 +299,36 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
 .config-path { border-top: 1px solid var(--line); padding-top: 12px; }
 .saved { color: var(--good); }
+
+/* ------------------------------------------------------------ config problem */
+
+/* Full width and first in the grid: when the config will not parse, nothing
+   else in the window can work, so this is the only thing worth looking at. */
+.problem {
+  grid-column: 1 / -1;
+  border-color: rgba(240, 119, 127, 0.45);
+  background: rgba(240, 119, 127, 0.05);
+}
+.problem h2 { color: var(--danger); }
+.problem pre {
+  margin: 0 0 14px;
+  padding: 12px;
+  background: var(--surface-2);
+  border-radius: 7px;
+  overflow-x: auto;
+  font-size: 12.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.problem-actions { display: flex; gap: 10px; }
+
+.config-path {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  flex-wrap: wrap;
+}
+.config-path .hint { margin: 0; border: none; padding: 0; }

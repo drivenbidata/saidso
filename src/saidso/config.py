@@ -13,6 +13,7 @@ client — recovering from that later means finding it first.
 
 from __future__ import annotations
 
+import re
 import tomllib
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -325,9 +326,53 @@ def load(path: Path | None = None, *, create: bool = False) -> Config:
         cfg.save(target)
         return replace(cfg, source_path=target)
     try:
-        data = tomllib.loads(target.read_text(encoding="utf-8"))
-    except tomllib.TOMLDecodeError as e:
-        raise ConfigError(f"{target} is not valid TOML: {e}") from e
+        text = target.read_text(encoding="utf-8")
     except OSError as e:
         raise ConfigError(f"Could not read {target}: {e}") from e
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as e:
+        raise ConfigError(explain_toml_error(target, text, e)) from e
     return from_dict(data, source=target)
+
+
+def explain_toml_error(target: Path, text: str, error: Exception) -> str:
+    """Turn a parser message into something a person can act on.
+
+    tomllib reports "Cannot overwrite a value (at line 45, column 12)", which is
+    accurate and nearly useless: it names neither the file nor the line's
+    contents, and says nothing about the cause. Since the config is a file we
+    ask people to edit by hand, the message it fails with is part of the
+    product.
+    """
+    message = str(error)
+    lines = [f"{target} is not valid TOML.", ""]
+
+    match = re.search(r"\(at line (\d+), column (\d+)\)", message)
+    if match:
+        number, column = int(match.group(1)), int(match.group(2))
+        source = text.splitlines()
+        if 1 <= number <= len(source):
+            lines.append(f"  {number:>4} | {source[number - 1]}")
+            lines.append(f"       | {' ' * max(column - 1, 0)}^")
+            lines.append("")
+    lines.append(f"  {message}")
+
+    # The mistake this config invites, by a wide margin: pasting a second
+    # project's fields without giving it its own table header, so the keys land
+    # in the previous project and collide.
+    if "overwrite" in message.lower() or "duplicate" in message.lower():
+        lines += [
+            "",
+            "A duplicated key usually means a `[[projects]]` header is missing.",
+            "Every project needs its own, and the double brackets are what make",
+            "it a list:",
+            "",
+            "    [[projects]]",
+            '    key = "general"',
+            "    ...",
+            "",
+            "    [[projects]]      <- this line is easy to leave out",
+            '    key = "360"',
+        ]
+    return "\n".join(lines)

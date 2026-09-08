@@ -30,6 +30,11 @@ const els = {
   configPath: $("config-path"),
   micSelect: $("mic-select"),
   systemSelect: $("system-select"),
+  openConfig: $("open-config"),
+  problem: $("config-problem"),
+  problemText: $("config-problem-text"),
+  problemOpen: $("problem-open"),
+  problemRetry: $("problem-retry"),
 };
 
 let recording = false;
@@ -294,6 +299,11 @@ async function refreshAll() {
 async function doRefresh() {
   try {
     const settings = await loadSettings();
+    if (settings.config_error) {
+      showConfigProblem(settings.config_error);
+      return;
+    }
+    clearConfigProblem();
     await loadProjects();
     await loadDevices(settings);
     await loadInbox();
@@ -305,6 +315,37 @@ async function doRefresh() {
   } catch (err) {
     log(err.message, "bad");
   }
+}
+
+function showConfigProblem(message) {
+  els.problemText.textContent = message;
+  els.problem.hidden = false;
+  // Nothing works without a config, and pretending otherwise invites a click
+  // that fails for a second, unrelated-looking reason.
+  els.record.disabled = true;
+  els.pick.disabled = true;
+  els.project.replaceChildren();
+  els.micSelect.replaceChildren();
+  els.systemSelect.replaceChildren();
+  els.mic.textContent = "—";
+  els.sys.textContent = "—";
+  setStatus("config problem", "bad");
+}
+
+function clearConfigProblem() {
+  els.problem.hidden = true;
+  els.problemText.textContent = "";
+  els.pick.disabled = false;
+  els.record.disabled = false;
+}
+
+async function openConfig() {
+  if (!configPath) {
+    log("Don't know where the config lives yet — try Refresh.", "bad");
+    return;
+  }
+  const problem = await window.saidso.openPath(configPath);
+  if (problem) log(`Couldn't open ${configPath}: ${problem}`, "bad");
 }
 
 // ---------------------------------------------------------------- actions
@@ -414,17 +455,17 @@ els.project.addEventListener("change", async () => {
     log("Don't know where the config lives yet — try Refresh.", "bad");
     return;
   }
-  const problem = await window.saidso.openPath(configPath);
-  if (problem) {
-    log(`Couldn't open ${configPath}: ${problem}`, "bad");
-    return;
-  }
+  await openConfig();
   log("Opened the config. Add a [[projects]] block, save, then press Refresh.");
 });
 
 els.project.addEventListener("input", () => {
   if (els.project.value !== EDIT_PROJECTS) lastProject = els.project.value;
 });
+
+els.openConfig.addEventListener("click", openConfig);
+els.problemOpen.addEventListener("click", openConfig);
+els.problemRetry.addEventListener("click", refreshAll);
 
 els.refresh.addEventListener("click", refreshAll);
 els.revealNotes.addEventListener("click", () => window.saidso.reveal(notesDir));

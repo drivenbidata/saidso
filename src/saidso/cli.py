@@ -29,6 +29,7 @@ examples:
   saidso ingest teams-export.vtt               file an existing transcript
   saidso watch ~/Downloads/recordings          transcribe anything dropped in a folder
   saidso parse transcript.vtt                  print a clean Speaker: text log
+  saidso config check                          validate the config file
   saidso tracker sweep                         move ticked items into Completed
   saidso sync                                  pull, stage, guard, commit, push
 """
@@ -385,6 +386,24 @@ def cmd_config(args: argparse.Namespace) -> int:
     if args.config_cmd == "path":
         _out(str(target))
         return 0
+    if args.config_cmd == "check":
+        if not target.exists():
+            _err(f"No config at {target}. Run: saidso init")
+            return 1
+        try:
+            cfg = config_mod.load(target)
+        except SaidsoError as e:
+            _err(str(e))
+            return 1
+        _out(f"{target}")
+        _out("  valid")
+        _out(f"  notes directory: {cfg.notes_dir}")
+        names = ", ".join(p.key for p in cfg.active_projects()) or "(none)"
+        _out(f"  projects: {names}")
+        _out(f"  default:  {cfg.default_project}")
+        if not cfg.notes_dir.exists():
+            _out(f"  note: {cfg.notes_dir} doesn't exist yet; it's created on first write")
+        return 0
     if not target.exists():
         _err(f"No config at {target}. Run: saidso init")
         return 1
@@ -510,7 +529,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("config", parents=[common], help="show the config or its location")
     csub = p.add_subparsers(dest="config_cmd", required=True)
-    for name, helptext in (("show", "print the config"), ("path", "print the config path")):
+    for name, helptext in (
+        ("show", "print the config"),
+        ("path", "print the config path"),
+        ("check", "validate the config and say what is wrong"),
+    ):
         cp = csub.add_parser(name, parents=[common], help=helptext)
         cp.set_defaults(func=cmd_config)
 

@@ -214,6 +214,41 @@ def test_first_launch_creates_a_config_instead_of_erroring(tmp_path):
             proc.kill()
 
 
+def test_settings_still_answers_when_the_config_is_broken(tmp_path):
+    """The window learns where the config is from this endpoint. If it 400s on a
+    broken config, the one action that would help — open the file — is exactly
+    the one the window can no longer offer."""
+    home = tmp_path / "broken"
+    home.mkdir()
+    # A second project's fields without their own [[projects]] header: the
+    # mistake this config invites, and a real one that was hit.
+    (home / "config.toml").write_text(
+        '[[projects]]\nkey = "general"\nfolder = "general"\n\nkey = "360"\n',
+        encoding="utf-8",
+    )
+    env = {**os.environ, "SAIDSO_HOME": str(home), "PYTHONPATH": str(Path("src").resolve())}
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "saidso.server", "--port", "0", "--exit-with-parent"],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, env=env,
+    )
+    try:
+        handshake = json.loads(proc.stdout.readline())
+        status, body = _get(handshake, "/settings")
+        assert status == 200, "settings must not fail with a broken config"
+        assert body["config_error"], "the failure should be reported as a field"
+        assert body["config_path"].endswith("config.toml")
+        # and the message has to be actionable, not just a parser dump
+        assert "[[projects]]" in body["config_error"]
+        assert "line" in body["config_error"]
+    finally:
+        proc.stdin.close()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
 def test_the_engine_exits_when_its_parent_does(tmp_path):
     """An orphaned engine could keep holding the microphone with no window to stop it."""
     home = tmp_path / "home"

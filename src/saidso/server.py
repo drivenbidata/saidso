@@ -159,7 +159,32 @@ class Engine:
         }
 
     def settings(self) -> dict[str, Any]:
-        cfg = self.config()
+        """Never fails, even when the config does not parse.
+
+        Everything else in this API needs a working config and is entitled to
+        fail without one. This endpoint is not: it is how the window learns
+        where the config lives, and a window that cannot tell you where the
+        broken file is — or offer to open it — is a dead end exactly when you
+        need it most. So a parse failure comes back as a field, not a 400.
+        """
+        from .errors import ConfigError
+
+        try:
+            cfg = self.config()
+        except ConfigError as e:
+            return {
+                "version": __version__,
+                "config_path": str(self.config_path or config_mod.paths.config_file()),
+                "config_error": str(e),
+                "notes_dir": "",
+                "inbox": "",
+                "speaker_name": "",
+                "model": "",
+                "diarize": False,
+                "flavor": "",
+                "mic": "",
+                "system": "",
+            }
         return {
             "version": __version__,
             "config_path": str(cfg.source_path or ""),
