@@ -39,6 +39,28 @@ examples:
 # ---------------------------------------------------------------- helpers
 
 
+def _use_utf8() -> None:
+    """Make stdout and stderr able to carry any transcript, whatever the console is.
+
+    Windows hands a process started from a terminal a cp1252 stdout, and
+    printing a transcript that contains anything outside that set raises
+    UnicodeEncodeError partway through the write — the command dies with a
+    traceback and leaves a half-written file behind. `saidso parse` did exactly
+    that on a real transcript.
+
+    Transcripts are arbitrary human speech in arbitrary languages, so the
+    console's codepage is never the right encoding for them. `errors="replace"`
+    is the belt to that braces: a lone surrogate from a mangled source should
+    cost one character, not the whole run.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue  # pytest's capture, or something a caller swapped in
+        with contextlib.suppress(Exception):
+            reconfigure(encoding="utf-8", errors="replace")
+
+
 def _out(msg: str = "") -> None:
     print(msg, flush=True)
 
@@ -583,6 +605,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _use_utf8()
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
