@@ -27,6 +27,7 @@ import argparse
 import contextlib
 import json
 import queue
+import re
 import secrets
 import sys
 import threading
@@ -291,11 +292,48 @@ class Engine:
             title=body.get("title") or None,
             project=body.get("project") or None,
             link=body.get("link") or "",
-            participants=body.get("participants") or [],
+            participants=_names(body.get("participants")),
+            on_check_in=self._check_in,
+            on_expire=self._check_in_expired,
         )
         session.start()
         self.session = session
         self.events.emit("recording", state="started", title=session.title)
+        return self.recording_status()
+
+    # ------------------------------------------------------------ check-in
+
+    def _check_in(self, elapsed: float, grace: float) -> None:
+        self.events.emit(
+            "check-in", state="asking", elapsed=round(elapsed), grace=round(grace)
+        )
+
+    def _check_in_expired(self) -> None:
+        """Nobody answered: stop and transcribe what there is.
+
+        Runs on the session's watchdog thread, so it goes through the same
+        `stop_recording` the button does rather than reaching into the session
+        — the transcript, the events and the busy flag all have to come out
+        identical whether a person or the clock ended the recording.
+        """
+        self.events.emit("check-in", state="expired")
+        # If someone stopped it by hand in the same moment, theirs wins.
+        with contextlib.suppress(SaidsoError):
+            self.stop_recording(reason="no answer to the check-in")
+
+    def confirm_recording(self) -> dict[str, Any]:
+        """Answer an outstanding check-in."""
+        if self.session is None:
+            raise SaidsoError("Not recording.")
+        self.session.confirm()
+        self.events.emit("check-in", state="confirmed")
+        return self.recording_status()
+
+    def set_participants(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Add names or email addresses to the recording in progress."""
+        if self.session is None:
+            raise SaidsoError("Not recording.")
+        self.session.add_participants(_names(body.get("participants")))
         return self.recording_status()
 
     def recording_status(self) -> dict[str, Any]:
@@ -309,16 +347,23 @@ class Engine:
             "elapsed": round(self.session.elapsed, 1),
             "mic": self.session.mic.name if self.session.mic else None,
             "system": self.session.system.name if self.session.system else None,
+            "participants": list(self.session.participants),
+            # Reported rather than assumed by the window: reopening it mid
+            # check-in must show the prompt that is actually outstanding.
+            "awaiting_check_in": self.session.awaiting_check_in,
+            "check_in_remaining": self.session.check_in_remaining(),
         }
 
-    def stop_recording(self) -> dict[str, Any]:
+    def stop_recording(self, *, reason: str = "") -> dict[str, Any]:
         if self.session is None:
             raise SaidsoError("Not recording.")
         session, self.session = self.session, None
-        self.events.emit("recording", state="stopped")
+        self.events.emit("recording", state="stopped", reason=reason)
 
         def work():
             outcome = session.stop(progress=self._progress())
+            if reason:
+                outcome.notes.append(f"Recording stopped automatically — {reason}.")
             return _outcome(outcome)
 
         self._run("transcribe", work)
@@ -376,6 +421,19 @@ class Engine:
             "problems": report.problems,
             "index": str(report.index_path or ""),
         }
+
+
+def _names(raw: Any) -> list[str]:
+    """Accept participants as a list or as one separated string.
+
+    The window sends a list; a script or a paste from an invite sends a line of
+    comma-separated names and addresses. Both are the same request, so both are
+    read rather than one being an error.
+    """
+    if raw is None:
+        return []
+    parts = raw if isinstance(raw, (list, tuple)) else re.split(r"[;,\n]+", str(raw))
+    return [str(p).strip() for p in parts if str(p).strip()]
 
 
 def _outcome(outcome) -> dict[str, Any]:
@@ -467,6 +525,8 @@ class Handler(BaseHTTPRequestHandler):
                 "/record/start": lambda: self.engine.start_recording(self._body()),
                 "/record/stop": self.engine.stop_recording,
                 "/record/cancel": self.engine.cancel_recording,
+                "/record/confirm": self.engine.confirm_recording,
+                "/record/participants": lambda: self.engine.set_participants(self._body()),
                 "/transcribe": lambda: self.engine.transcribe(self._body()),
                 "/tracker/sweep": self.engine.sweep,
                 "/shutdown": self._shutdown,

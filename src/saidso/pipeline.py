@@ -14,10 +14,14 @@ switched off, which is the common case.
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import shutil
+import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from . import dating, paths
 from .capture import LOOPBACK, MIC, Recorder, Track, get_backend
@@ -402,6 +406,14 @@ class LiveSession:
     Deliberately a small object rather than a blocking call: the desktop shell
     needs to start it, show a timer, and stop it from a different thread, and
     the CLI needs the same thing with a keypress.
+
+    A long recording checks in. Once `capture.check_in_after` has passed the
+    session asks whether this is still a meeting, and if nothing answers within
+    `capture.check_in_grace` it gives up and hands back control so the caller
+    can stop and transcribe. The timer lives here rather than in the window
+    because a window can be closed, minimised or crash, and the failure it
+    exists to prevent — hours of an unattended microphone with a real meeting
+    buried at the front — is exactly what happens when nobody is watching.
     """
 
     def __init__(
@@ -414,6 +426,8 @@ class LiveSession:
         participants: list[str] | None = None,
         model: str | None = None,
         diarize_audio: bool | None = None,
+        on_check_in: Callable[[float, float], None] | None = None,
+        on_expire: Callable[[], None] | None = None,
     ) -> None:
         self.cfg = cfg
         self.started_at = dt.datetime.now()
@@ -423,6 +437,20 @@ class LiveSession:
         self.participants = list(participants or [])
         self.model = model
         self.diarize_audio = cfg.transcribe.diarize if diarize_audio is None else diarize_audio
+
+        # `on_expire` is what separates a nag from a safety net. Without it the
+        # session only ever asks — which is what the CLI wants, where somebody
+        # is sitting at a terminal and an auto-stop would truncate a meeting
+        # they are actively in.
+        self.on_check_in = on_check_in
+        self.on_expire = on_expire
+        self.check_in_after = float(cfg.capture.check_in_after)
+        self.check_in_grace = float(cfg.capture.check_in_grace)
+        self._cv = threading.Condition()
+        self._answered = False
+        self._finished = False
+        self._awaiting_since: float | None = None
+        self._watchdog: threading.Thread | None = None
 
         self.backend = get_backend(cfg.capture.backend)
         self.mic = self.backend.resolve(cfg.capture.mic, MIC)
@@ -445,17 +473,113 @@ class LiveSession:
     def running(self) -> bool:
         return self.recorder.running
 
+    # ------------------------------------------------------------ check-in
+
+    @property
+    def awaiting_check_in(self) -> bool:
+        """True while a check-in is outstanding and the clock is running."""
+        with self._cv:
+            return self._awaiting_since is not None
+
+    def check_in_remaining(self) -> float | None:
+        """Seconds left to answer, or None when nothing was asked."""
+        with self._cv:
+            if self._awaiting_since is None:
+                return None
+            spent = self.elapsed - self._awaiting_since
+            return max(0.0, self.check_in_grace - spent)
+
+    def confirm(self) -> None:
+        """Answer a check-in: yes, this is still a meeting.
+
+        Safe to call when nothing was asked — the desktop shell can send it on
+        any sign of life without first checking whether a prompt is showing.
+        """
+        with self._cv:
+            self._answered = True
+            self._awaiting_since = None
+            self._cv.notify_all()
+
+    def add_participants(self, names: list[str]) -> list[str]:
+        """Record who is in the meeting, mid-recording.
+
+        Names arrive while a call is happening — someone joins late, or you
+        only catch a surname halfway through — so this is additive and
+        de-duplicated rather than a setter, and the frontmatter is written from
+        whatever the list holds at the moment recording stops.
+        """
+        with self._cv:
+            seen = {p.casefold() for p in self.participants}
+            for name in names:
+                name = name.strip()
+                if name and name.casefold() not in seen:
+                    seen.add(name.casefold())
+                    self.participants.append(name)
+            return list(self.participants)
+
+    def _end(self) -> None:
+        """Release the watchdog. Idempotent; both stop paths call it."""
+        with self._cv:
+            self._finished = True
+            self._awaiting_since = None
+            self._cv.notify_all()
+
+    def _watch(self) -> None:
+        while True:
+            with self._cv:
+                if self._cv.wait_for(lambda: self._finished, timeout=self.check_in_after):
+                    return
+                self._answered = False
+                self._awaiting_since = self.elapsed
+
+            # A callback that raises — a dead socket, a closed window — must
+            # not take the recording with it. The grace period still runs, so
+            # an unreachable UI ends in an auto-stop rather than a live lock.
+            self._safely(self.on_check_in, self.elapsed, self.check_in_grace)
+
+            with self._cv:
+                self._cv.wait_for(
+                    lambda: self._answered or self._finished, timeout=self.check_in_grace
+                )
+                finished, answered = self._finished, self._answered
+                self._awaiting_since = None
+
+            if finished:
+                return
+            if answered or self.on_expire is None:
+                continue  # still going, or warn-only: ask again next interval
+            self._safely(self.on_expire)
+            return
+
+    @staticmethod
+    def _safely(fn: Callable | None, *args: Any) -> None:
+        if fn is None:
+            return
+        # A listener must not kill a recording: a dead socket or a closed
+        # window is exactly when the watchdog matters most.
+        with contextlib.suppress(Exception):
+            fn(*args)
+
+    # ------------------------------------------------------------ lifecycle
+
     def start(self) -> None:
         self.recorder.start()
+        if self.check_in_after > 0 and self.on_check_in is not None:
+            self._watchdog = threading.Thread(
+                target=self._watch, daemon=True, name="saidso-check-in"
+            )
+            self._watchdog.start()
 
     def cancel(self) -> None:
         """Stop and discard, leaving nothing behind."""
+        self._end()
         for track in self.recorder.stop():
             track.path.unlink(missing_ok=True)
         self.backend.close()
 
     def stop(self, *, progress: ProgressFn | None = None) -> Outcome:
         """Stop recording, transcribe both tracks, and file the transcript."""
+        self._end()
         tracks = self.recorder.stop()
         self.backend.close()
         if not tracks:
@@ -482,7 +606,9 @@ class LiveSession:
             duration=merged.duration,
             language=merged.language,
             link=self.link,
-            participants=self.participants,
+            # Copied, not shared: the list can still be appended to from the
+            # shell's thread while this is being written.
+            participants=list(self.participants),
             date_source="recorded",
         )
         transcript, vtt_path = _write(self.cfg, merged.segments, meta, self.route)

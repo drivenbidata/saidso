@@ -13,6 +13,7 @@
   --accent-ink: #0b1220;
   --danger: #f0777f;
   --good: #6edaa4;
+  --attention: #f0c674;
   --radius: 10px;
 }
 
@@ -128,6 +129,46 @@ button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* ------------------------------------------------- participants + check-in */
+
+/* The Add button sits in a .fields row beside a labelled input, so it needs
+   the label's height off the top to line up with the box rather than the word
+   above it. */
+#add-participants { align-self: flex-end; flex: none; padding: 8px 16px; }
+
+.chips { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; padding: 0; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12.5px;
+}
+.chip-x {
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+}
+.chip-x:hover { color: var(--danger); }
+
+.check-in {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--attention);
+  border-radius: var(--radius);
+  background: rgba(240, 198, 116, 0.08);
+}
+.check-in p { margin: 0 0 10px; font-size: 13px; }
+.check-in strong { display: block; margin-bottom: 2px; }
+#check-in-text { color: var(--muted); font-variant-numeric: tabular-nums; }
+.check-in-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* ------------------------------------------------------------ buttons */
 
@@ -257,6 +298,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .log time { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
 .log .bad { color: var(--danger); }
 .log .good { color: var(--good); }
+.log .warn { color: var(--attention); }
 
 /* ------------------------------------------------------------ inbox */
 

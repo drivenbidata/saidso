@@ -12,6 +12,9 @@ contextBridge.exposeInMainWorld("saidso", {
   pickFolder: (current) => ipcRenderer.invoke("pick-folder", current),
   openPath: (path) => ipcRenderer.invoke("open-path", path),
   reveal: (path) => ipcRenderer.invoke("reveal", path),
+  // Ask for the user's eyes without stealing focus from whatever they are
+  // doing — a check-in that steals focus mid-meeting is worse than the problem.
+  attention: () => ipcRenderer.invoke("attention"),
   onEvent: (handler) => {
     const listener = (_event, payload) => handler(payload);
     ipcRenderer.on("engine-event", listener);

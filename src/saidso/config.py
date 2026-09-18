@@ -34,7 +34,9 @@ class Project:
     """One destination for meeting notes.
 
     `key` is the token that appears in transcript filenames and frontmatter;
-    `folder` is where notes land, relative to the notes directory.
+    `folder` is where notes land, relative to the notes directory — or an
+    absolute path, for a project whose notes already live in a vault of their
+    own and are not being moved.
     """
 
     key: str
@@ -44,8 +46,21 @@ class Project:
     description: str = ""
     active: bool = True
 
+    @property
+    def is_external(self) -> bool:
+        """True when the notes live outside the notes directory.
+
+        Worth checking before assuming a project's files are reachable from
+        `notes_dir` — sync and the tracker index both are.
+        """
+        return Path(self.folder).is_absolute()
+
     def tracker_path(self) -> str:
-        return self.tracker or f"{self.folder}/Tracker.md"
+        if self.tracker:
+            return self.tracker
+        if self.is_external:
+            return str(Path(self.folder) / "Tracker.md")
+        return f"{self.folder}/Tracker.md"
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +77,14 @@ class CaptureSettings:
     mic: str = ""  # device index or name fragment; "" = system default
     system: str = ""  # loopback device; "" = system default output
     keep_audio: bool = False
+    # A recording nobody stopped is the most expensive kind of mistake here: it
+    # keeps the microphone, fills the disk, and buries a real meeting inside
+    # hours of whatever the room happened to play. So a long recording is asked
+    # whether it is still a meeting, and stops itself when nothing answers.
+    # Seconds between check-ins; 0 disables the watchdog entirely.
+    check_in_after: int = 3600
+    # Seconds to answer before the recording stops and transcribes itself.
+    check_in_grace: int = 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,7 +98,10 @@ class OutputSettings:
 @dataclass(frozen=True, slots=True)
 class TrackerSettings:
     enabled: bool = True
-    index: str = "Tracker.md"  # root index; holds counts only, never items
+    # Root index; holds counts only, never items. Relative to notes_dir, or an
+    # absolute path — which is what an external project needs, so the index can
+    # sit beside the notes it counts rather than beside the config.
+    index: str = "Tracker.md"
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +162,11 @@ class Config:
         )
 
     def project_dir(self, key: str | None = None) -> Path:
+        """Where this project's notes live.
+
+        Joining an absolute folder discards `notes_dir`, which is exactly what
+        an external project wants — see `Project.is_external`.
+        """
         return self.notes_dir / self.project(key).folder
 
     def tracker_path(self, key: str | None = None) -> Path:
@@ -164,6 +195,8 @@ class Config:
                 "mic": self.capture.mic,
                 "system": self.capture.system,
                 "keep_audio": self.capture.keep_audio,
+                "check_in_after": self.capture.check_in_after,
+                "check_in_grace": self.capture.check_in_grace,
             },
             "output": {
                 "flavor": self.output.flavor,
@@ -199,6 +232,39 @@ class Config:
         return target
 
 
+def _checked_location(value: str, what: str) -> str:
+    """A path that is either relative to notes_dir or frankly absolute.
+
+    Absolute is allowed because notes sometimes already live somewhere and are
+    not moving. `..` is not, in either form: a path that climbs is doing the
+    same thing without saying so, and is silent about where it lands.
+    """
+    if ".." in Path(value).parts:
+        raise ConfigError(
+            f"{what} is {value!r}. A relative path may not escape notes_dir with "
+            "'..'. If it genuinely lives elsewhere, give the absolute path instead — "
+            "that is explicit and survives a move of notes_dir."
+        )
+    return value
+
+
+def _seconds(raw: dict[str, Any], key: str, default: int) -> int:
+    """A non-negative whole number of seconds, or a clear error.
+
+    A negative interval would arm a watchdog that fires immediately and stops
+    the recording it was meant to protect, so it is refused at load rather than
+    clamped — someone who typed -1 meant something, and 0 already means off.
+    """
+    if key not in raw:
+        return default
+    value = raw[key]
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ConfigError(f"capture.{key} must be a whole number of seconds, not {value!r}.")
+    if value < 0:
+        raise ConfigError(f"capture.{key} cannot be negative (0 turns it off).")
+    return value
+
+
 def _project_from(raw: dict[str, Any], index: int) -> Project:
     key = str(raw.get("key", "")).strip()
     if not key:
@@ -209,12 +275,7 @@ def _project_from(raw: dict[str, Any], index: int) -> Project:
             "Keys go into filenames and frontmatter, so they must have no spaces "
             "or path separators."
         )
-    folder = str(raw.get("folder") or key).strip()
-    if Path(folder).is_absolute() or ".." in Path(folder).parts:
-        raise ConfigError(
-            f"Project {key!r} has folder {folder!r}. Folders are relative to notes_dir "
-            "and may not escape it."
-        )
+    folder = _checked_location(str(raw.get("folder") or key).strip(), f"Project {key!r} folder")
     return Project(
         key=key,
         label=str(raw.get("label") or key),
@@ -271,6 +332,8 @@ def from_dict(data: dict[str, Any], source: Path | None = None) -> Config:
             mic=str(c.get("mic", "")),
             system=str(c.get("system", "")),
             keep_audio=bool(c.get("keep_audio", False)),
+            check_in_after=_seconds(c, "check_in_after", 3600),
+            check_in_grace=_seconds(c, "check_in_grace", 60),
         ),
         output=OutputSettings(
             flavor=flavor,
@@ -280,7 +343,7 @@ def from_dict(data: dict[str, Any], source: Path | None = None) -> Config:
         ),
         tracker=TrackerSettings(
             enabled=bool(tr.get("enabled", True)),
-            index=str(tr.get("index", "Tracker.md")),
+            index=_checked_location(str(tr.get("index", "Tracker.md")), "The tracker index"),
         ),
         sync=SyncSettings(
             enabled=bool(s.get("enabled", False)),

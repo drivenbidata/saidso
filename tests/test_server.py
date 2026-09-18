@@ -268,3 +268,38 @@ def test_the_engine_exits_when_its_parent_does(tmp_path):
     while proc.poll() is None and time.time() < deadline:
         time.sleep(0.1)
     assert proc.poll() == 0, "the engine outlived its parent"
+
+
+# ------------------------------------------------- check-in and participants
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        (["Alex Rivera", " Sam "], ["Alex Rivera", "Sam"]),
+        ("Alex Rivera, sam@example.com", ["Alex Rivera", "sam@example.com"]),
+        ("Alex Rivera; Sam\nPriya Nair", ["Alex Rivera", "Sam", "Priya Nair"]),
+        (None, []),
+        ("  ,  ", []),
+    ],
+)
+def test_participants_accept_a_list_or_a_pasted_line(raw, expected):
+    """The window sends a list; a paste from an invite sends one string."""
+    from saidso.server import _names
+
+    assert _names(raw) == expected
+
+
+@pytest.mark.parametrize("path", ["/record/confirm", "/record/participants"])
+def test_check_in_endpoints_say_so_when_nothing_is_recording(engine, path):
+    with pytest.raises(urllib.error.HTTPError) as caught:
+        _post(engine, path, {"participants": ["Alex Rivera"]})
+    assert caught.value.code == 400
+    assert "Not recording" in json.loads(caught.value.read())["error"]
+
+
+def test_status_is_quiet_about_check_ins_when_idle(engine):
+    _, status = _get(engine, "/record/status")
+    assert status["recording"] is False
+    # No stale check-in state to mislead a window that has just reopened.
+    assert "awaiting_check_in" not in status

@@ -10,9 +10,16 @@ const els = {
   revealNotes: $("reveal-notes"),
   title: $("title"),
   project: $("project"),
+  participants: $("participants"),
+  addParticipants: $("add-participants"),
+  participantList: $("participant-list"),
   record: $("record"),
   cancel: $("cancel"),
   timer: $("timer"),
+  checkIn: $("check-in"),
+  checkInText: $("check-in-text"),
+  checkInYes: $("check-in-yes"),
+  checkInStop: $("check-in-stop"),
   mic: $("dev-mic"),
   sys: $("dev-sys"),
   pick: $("pick"),
@@ -46,6 +53,8 @@ const EDIT_PROJECTS = "__edit_projects__";
 let lastProject = "";
 let timerHandle = null;
 let startedAt = 0;
+let participants = [];
+let checkInHandle = null;
 
 // ---------------------------------------------------------------- helpers
 
@@ -100,6 +109,97 @@ function syncControls() {
   els.title.disabled = recording;
   els.project.disabled = recording;
   els.timer.classList.toggle("live", recording);
+  // The name and project are fixed once recording starts, but who is in the
+  // room is not — people join late, and that is exactly when you learn a name.
+  if (!recording) hideCheckIn();
+}
+
+// ---------------------------------------------------------------- people
+
+function splitNames(raw) {
+  return raw
+    .split(/[;,\n]+/)
+    .map((name) => name.trim())
+    .filter(Boolean);
+}
+
+function renderParticipants() {
+  els.participantList.replaceChildren();
+  for (const name of participants) {
+    const li = document.createElement("li");
+    li.className = "chip";
+    li.textContent = name;
+    if (!recording) {
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "chip-x";
+      remove.title = `Remove ${name}`;
+      remove.setAttribute("aria-label", `Remove ${name}`);
+      remove.textContent = "×";
+      remove.addEventListener("click", () => {
+        participants = participants.filter((p) => p !== name);
+        renderParticipants();
+      });
+      li.append(remove);
+    }
+    els.participantList.append(li);
+  }
+}
+
+// Locally before recording, through the engine once it has started — the
+// engine owns the list the transcript is written from, so mid-recording edits
+// have to go there rather than be held here and sent at the end.
+async function addParticipants() {
+  const names = splitNames(els.participants.value);
+  if (!names.length) return;
+  if (recording) {
+    try {
+      const status = await api("POST", "/record/participants", { participants: names });
+      participants = status.participants || participants;
+      log(`Added ${names.join(", ")} to the recording.`);
+    } catch (err) {
+      log(err.message, "bad");
+      return;
+    }
+  } else {
+    const seen = new Set(participants.map((p) => p.toLowerCase()));
+    for (const name of names) {
+      if (!seen.has(name.toLowerCase())) {
+        seen.add(name.toLowerCase());
+        participants.push(name);
+      }
+    }
+  }
+  els.participants.value = "";
+  renderParticipants();
+}
+
+// ---------------------------------------------------------------- check-in
+
+function showCheckIn(seconds) {
+  els.checkIn.hidden = false;
+  let left = Math.max(0, Math.round(seconds));
+  const tick = () => {
+    els.checkInText.textContent =
+      left > 0
+        ? `No answer in ${left}s and this will stop and transcribe on its own.`
+        : "Stopping…";
+    if (left <= 0) {
+      clearInterval(checkInHandle);
+      checkInHandle = null;
+      return;
+    }
+    left -= 1;
+  };
+  clearInterval(checkInHandle);
+  tick();
+  checkInHandle = setInterval(tick, 1000);
+}
+
+function hideCheckIn() {
+  els.checkIn.hidden = true;
+  if (checkInHandle) clearInterval(checkInHandle);
+  checkInHandle = null;
 }
 
 function startTimer(offset) {
@@ -310,8 +410,15 @@ async function doRefresh() {
     const status = await api("GET", "/record/status");
     recording = status.recording;
     busy = status.busy;
+    participants = status.participants || [];
     if (recording) startTimer(status.elapsed || 0);
+    renderParticipants();
     syncControls();
+    // Reopening the window mid check-in has to show the prompt that is
+    // actually outstanding, not wait for an event that already fired.
+    if (recording && status.awaiting_check_in) {
+      showCheckIn(status.check_in_remaining ?? 0);
+    }
   } catch (err) {
     log(err.message, "bad");
   }
@@ -361,16 +468,47 @@ els.record.addEventListener("click", async () => {
       setProgress(null, "Transcribing…");
       return;
     }
-    await api("POST", "/record/start", {
+    // Anything typed but not yet added should still count — nobody should
+    // lose a name because they hit Record instead of Add.
+    const pending = splitNames(els.participants.value);
+    const status = await api("POST", "/record/start", {
       title: els.title.value.trim(),
       project: els.project.value,
+      participants: [...participants, ...pending],
     });
+    participants = status.participants || [];
+    els.participants.value = "";
     recording = true;
     startTimer(0);
+    renderParticipants();
     syncControls();
   } catch (err) {
     log(err.message, "bad");
   }
+});
+
+els.addParticipants.addEventListener("click", addParticipants);
+
+els.participants.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    addParticipants();
+  }
+});
+
+els.checkInYes.addEventListener("click", async () => {
+  hideCheckIn();
+  try {
+    await api("POST", "/record/confirm");
+    log("Still recording.");
+  } catch (err) {
+    log(err.message, "bad");
+  }
+});
+
+els.checkInStop.addEventListener("click", () => {
+  hideCheckIn();
+  els.record.click();
 });
 
 els.cancel.addEventListener("click", async () => {
@@ -527,6 +665,26 @@ window.saidso.onEvent((event) => {
       break;
     case "recording":
       if (event.state === "started") log(`Recording “${event.title}”.`);
+      if (event.state === "stopped" && event.reason) {
+        // The clock stopped it, not a click, so the window's own state is
+        // stale — catch up rather than leave a timer running on nothing.
+        recording = false;
+        stopTimer();
+        busy = true;
+        hideCheckIn();
+        syncControls();
+        setProgress(null, "Transcribing…");
+        log(`Recording stopped automatically — ${event.reason}.`, "warn");
+      }
+      break;
+    case "check-in":
+      if (event.state === "asking") {
+        showCheckIn(event.grace ?? 60);
+        log(`Still recording after ${Math.round((event.elapsed || 0) / 60)} minutes.`, "warn");
+        window.saidso.attention();
+      } else {
+        hideCheckIn();
+      }
       break;
     default:
       break;

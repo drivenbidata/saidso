@@ -123,6 +123,33 @@ without timestamps — an export's cue times describe cue boundaries rather than
 speaking turns, and inventing plausible-looking times would be worse than
 having none.
 
+### Long recordings check in
+
+After an hour, a recording asks whether it is still a meeting. In the desktop
+app you get a prompt; answer it and the clock resets for another hour. Ignore it
+for sixty seconds and the recording stops and transcribes itself, with a note in
+the outcome saying why.
+
+The timer lives in the engine, not the window, so closing or crashing the window
+cannot leave a microphone running. `saidso record` only warns — somebody is
+sitting at that terminal, and truncating a meeting they are actively in would be
+worse than the recording being long. Both intervals are configurable, and
+`check_in_after = 0` turns it off.
+
+This exists because of a real 6 hour 41 minute recording that held 78 minutes of
+meeting and five and a half hours of whatever the room played afterwards.
+
+### Who was there
+
+Names and email addresses can go in before you hit record, and while the
+recording is running — people join late, and that is usually when you learn a
+name. They land in the transcript's `participants` field, which is what saves
+the person writing the notes from guessing who "Others" was.
+
+```bash
+saidso record --name "Weekly Sync" --participants "Alex Rivera, sam@example.com"
+```
+
 ## What you get
 
 ```
@@ -145,6 +172,9 @@ source: live recording
 duration: "00:47:12"
 language: en
 speakers: [Javi Gold, Speaker 1]
+participants:
+  - Alex Rivera
+  - sam@example.com
 generator: SaidSo 0.1.0
 ---
 
@@ -155,6 +185,12 @@ generator: SaidSo 0.1.0
 ```
 
 One line per turn, so grep works and diffs read cleanly.
+
+`speakers` is what the recording could prove — your microphone track is you, and
+anyone else is `Others` unless diarisation split them. `participants` is what you
+told it: names and email addresses you typed in the window or passed with
+`--participants`. The two are different kinds of claim, so they are different
+fields, and whoever writes the meeting up should trust them differently.
 
 ## Projects
 
@@ -175,6 +211,22 @@ Adding one is a config edit and nothing else. A filename token that *nearly*
 matches a key — `acmé` for `acme` — stops the run and asks rather than falling
 through to the default, because a misfiled meeting is expensive precisely
 because nobody notices it.
+
+`folder` is relative to `notes_dir`, and may not climb out of it with `..`. It
+*may* be an absolute path, for a project whose notes already live in a vault of
+its own and aren't moving:
+
+```toml
+[[projects]]
+key = "acme"
+folder = "D:/acme-repo/notes/acme"
+```
+
+That project's notes and tracker are then written where you point them. Two
+things stop applying to it: `saidso sync` only ever commits `notes_dir`, so an
+external project needs whatever versioning its own vault already has, and the
+root tracker index lists its path plainly instead of as a link, since nothing
+inside the vault can resolve one.
 
 ## Action trackers
 
@@ -268,6 +320,8 @@ diarize = false
 mic = ""                    # device index or name fragment; "" = system default
 system = ""
 keep_audio = false
+check_in_after = 3600       # seconds before a long recording asks if you're still there; 0 = off
+check_in_grace = 60         # seconds to answer before it stops and transcribes itself
 
 [output]
 flavor = "plain"            # or "obsidian", for wiki-links

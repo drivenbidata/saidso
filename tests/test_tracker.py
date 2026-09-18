@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import datetime as dt
+from pathlib import Path
 
 from saidso import tracker
+from saidso.config import Project
 from saidso.tracker import index
 from saidso.tracker.model import parse
 from saidso.tracker.sweep import add_meeting, starter, sweep
@@ -123,3 +125,41 @@ def test_obsidian_flavor_uses_wiki_links(cfg):
     obsidian = replace(cfg, output=OutputSettings(flavor="obsidian"))
     body = index.render(index.collect(obsidian), flavor="obsidian")
     assert "acme/Tracker" in body
+
+
+def test_index_links_are_relative_to_the_index_not_notes_dir(cfg, tmp_path):
+    """The index can live outside notes_dir, and links resolve from where it sits."""
+    from dataclasses import replace
+
+    from saidso.config import TrackerSettings
+
+    vault = tmp_path / "vault"
+    external = replace(
+        cfg,
+        projects=(Project("acme", "Acme Corp", str(vault / "acme")),),
+        tracker=TrackerSettings(index=str(vault / "Tracker.md")),
+    )
+    (vault / "acme").mkdir(parents=True)
+    (vault / "acme" / "Tracker.md").write_text(starter("Acme Corp"), encoding="utf-8")
+
+    shown = index.collect(external)[0].tracker
+    assert shown == "acme/Tracker.md", "a tracker under the index is referred to relatively"
+
+
+def test_index_falls_back_to_an_absolute_path_off_its_own_tree(cfg, tmp_path):
+    from dataclasses import replace
+
+    from saidso.config import TrackerSettings
+
+    elsewhere = tmp_path / "elsewhere"
+    external = replace(
+        cfg,
+        projects=(Project("acme", "Acme Corp", str(elsewhere / "acme")),),
+        tracker=TrackerSettings(index=str(tmp_path / "vault" / "Tracker.md")),
+    )
+    (elsewhere / "acme").mkdir(parents=True)
+    (elsewhere / "acme" / "Tracker.md").write_text(starter("Acme Corp"), encoding="utf-8")
+
+    stats = index.collect(external)
+    assert Path(stats[0].tracker).is_absolute()
+    assert "`" in index.render(stats), "an unreachable tracker is shown plainly, not linked"

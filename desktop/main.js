@@ -237,6 +237,8 @@ function createWindow() {
     win.show();
     win.webContents.send("engine-status", lastStatus);
   });
+  // A taskbar flash that outlives the reason for it trains people to ignore it.
+  win.on("focus", () => win.flashFrame(false));
 }
 
 ipcMain.handle("api", async (_event, { method, path: endpoint, body }) => {
@@ -279,6 +281,15 @@ ipcMain.handle("open-path", async (_event, target) => {
 
 ipcMain.handle("reveal", (_event, target) => {
   if (typeof target === "string" && target) shell.showItemInFolder(target);
+});
+
+// A check-in is only useful if it is noticed, and the window is usually behind
+// the call it is recording. Flash the taskbar and bounce the dock — neither
+// takes focus, because pulling focus out of a live meeting to ask about that
+// meeting would be its own kind of rude.
+ipcMain.handle("attention", () => {
+  if (win && !win.isDestroyed() && !win.isFocused()) win.flashFrame(true);
+  if (app.dock) app.dock.bounce("informational");
 });
 
 app.whenReady().then(() => {

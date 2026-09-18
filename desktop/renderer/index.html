@@ -45,10 +45,43 @@
           </label>
         </div>
 
+        <div class="fields">
+          <label class="field">
+            <span>Who's here</span>
+            <input
+              id="participants"
+              type="text"
+              placeholder="Alex Rivera, sam@example.com"
+              autocomplete="off"
+            />
+          </label>
+          <button id="add-participants" class="secondary" type="button">Add</button>
+        </div>
+        <p class="hint">
+          Names or email addresses, comma separated. Written into the transcript's
+          frontmatter, so whoever writes this up doesn't have to guess. You can keep
+          adding people while the recording runs.
+        </p>
+        <ul id="participant-list" class="chips"></ul>
+
         <div class="record-row">
           <button id="record" class="primary" type="button" disabled>Record</button>
           <button id="cancel" class="ghost" type="button" hidden>Discard</button>
           <span id="timer" class="timer" aria-live="off">00:00</span>
+        </div>
+
+        <div id="check-in" class="check-in" role="alert" hidden>
+          <p>
+            <strong>Still in this meeting?</strong>
+            <span id="check-in-text">
+              This has been recording a while. It will stop and transcribe on its own
+              shortly.
+            </span>
+          </p>
+          <div class="check-in-actions">
+            <button id="check-in-yes" class="primary" type="button">Yes, keep recording</button>
+            <button id="check-in-stop" class="secondary" type="button">Stop now</button>
+          </div>
         </div>
 
         <dl class="devices">

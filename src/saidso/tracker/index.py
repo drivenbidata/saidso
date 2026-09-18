@@ -21,27 +21,43 @@ from .model import parse
 class ProjectStats:
     key: str
     label: str
-    tracker: str  # path relative to notes_dir
+    tracker: str  # as the index refers to it: relative to the index, or absolute
     open_items: int = 0
     meetings: int = 0
     completed: int = 0
     exists: bool = True
 
 
+def _display(path: Path, base: Path) -> str:
+    """How the index should refer to a tracker.
+
+    Links inside the index resolve against the index's own directory, which is
+    not always `notes_dir` — an external project can put either the notes or the
+    index somewhere else. So the reference is relative where the tracker sits
+    under the index, and absolute where it doesn't; computing it against
+    anything but the index's location produces a link that quietly goes nowhere.
+    """
+    try:
+        return path.relative_to(base).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 def collect(cfg: Config) -> list[ProjectStats]:
+    base = cfg.index_path.parent
     stats: list[ProjectStats] = []
     for project in cfg.active_projects():
-        rel = project.tracker_path()
-        path = cfg.notes_dir / rel
+        path = cfg.notes_dir / project.tracker_path()
+        shown = _display(path, base)
         if not path.exists():
-            stats.append(ProjectStats(project.key, project.label, rel, exists=False))
+            stats.append(ProjectStats(project.key, project.label, shown, exists=False))
             continue
         tracker = parse(path.read_text(encoding="utf-8", errors="replace"))
         stats.append(
             ProjectStats(
                 key=project.key,
                 label=project.label,
-                tracker=rel,
+                tracker=shown,
                 open_items=len(tracker.open_items()),
                 meetings=tracker.meeting_count(),
                 completed=tracker.completed_count(),
@@ -51,6 +67,11 @@ def collect(cfg: Config) -> list[ProjectStats]:
 
 
 def _link(rel: str, flavor: str) -> str:
+    if Path(rel).is_absolute():
+        # Outside the index's own directory, so neither a wiki-link nor a
+        # relative markdown link resolves. Show the path plainly rather than a
+        # link that silently goes nowhere.
+        return f"`{rel}`"
     if flavor == "obsidian":
         # Obsidian resolves wiki-links by basename, so the stem is the target.
         return f"[[{Path(rel).with_suffix('').as_posix()}|{rel}]]"

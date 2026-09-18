@@ -159,6 +159,18 @@ def cmd_record(args: argparse.Namespace) -> int:
     from .pipeline import LiveSession
 
     cfg = _load(args)
+
+    # Warn, never stop. Somebody is sitting at this terminal and already knows
+    # how to end the recording; an auto-stop here would cut off a meeting they
+    # are actively in. The desktop shell, which can be closed and forgotten,
+    # passes an on_expire and does stop.
+    def still_recording(elapsed: float, _grace: float) -> None:
+        _out("")
+        _out(
+            f"  Still recording — {int(elapsed // 60)}m so far. "
+            "Press Enter to stop and transcribe."
+        )
+
     session = LiveSession(
         cfg,
         title=args.name,
@@ -167,6 +179,7 @@ def cmd_record(args: argparse.Namespace) -> int:
         participants=_participants(args.participants),
         model=args.model,
         diarize_audio=True if args.diarize else (False if args.no_diarize else None),
+        on_check_in=still_recording,
     )
     _out(f"Recording '{session.title}' -> project {session.route.project.key}")
     _out(f"  microphone:   {session.mic or '(none)'}")
