@@ -89,3 +89,63 @@ def test_empty_file_raises(tmp_path):
     p.write_text("", encoding="utf-8")
     with pytest.raises(ParseError):
         parse_file(p)
+
+
+def _teams_docx(tmp_path, paragraphs):
+    docx = pytest.importorskip("docx")
+    doc = docx.Document()
+    for text in paragraphs:
+        doc.add_paragraph(text)
+    path = tmp_path / "meeting.docx"
+    doc.save(str(path))
+    return path
+
+
+def test_teams_docx_header_and_dialogue_in_one_paragraph(tmp_path):
+    """Teams joins header and multi-line dialogue with soft breaks; one export
+    had the entire meeting in a single paragraph and lost every speaker."""
+    path = _teams_docx(tmp_path, [
+        "Quarterly Data Review-20260922_083155-Meeting Recording",
+        "22 September 2026, 01:31pm",
+        "2h 45m 22s",
+        "\nJordan Fisk started transcription",
+        "\nWH Huddle Room   0:03\nYeah, let me stop.\nI can hear myself."
+        "\nBea Stone   0:40\nHello, team.\nMeet me at 3:30 tomorrow.",
+        "\nmorgan   1:02\nBonjour.",
+        "\nTara Zane stopped transcription",
+    ])
+    r = parse_file(path)
+    assert [(u.speaker, u.text) for u in r.utterances] == [
+        ("WH Huddle Room", "Yeah, let me stop. I can hear myself."),
+        ("Bea Stone", "Hello, team. Meet me at 3:30 tomorrow."),
+        ("morgan", "Bonjour."),
+    ]
+
+
+def test_docx_without_timestamps_still_uses_bare_name_lines(tmp_path):
+    path = _teams_docx(tmp_path, ["Ana Ruiz", "Good morning.", "Ben Okafor", "Hello."])
+    assert parse_file(path).speakers == ["Ana Ruiz", "Ben Okafor"]
+
+
+def test_teams_copy_paste_txt(tmp_path):
+    p = tmp_path / "part2.txt"
+    p.write_text(
+        "I-generated content may be incorrect\n\n"
+        "Tara Zane\n0 minutes 29 seconds0:29\nTara Zane 0 minutes 29 seconds\nMm.\nWR\n\n"
+        "WH Huddle Room\n0 minutes 30 seconds0:30\nWH Huddle Room 0 minutes 30 seconds\n"
+        "Before.\nWH Huddle Room 0 minutes 37 seconds\nJust numbers? OK\n"
+        "WH Huddle Room 1 hour 2 minutes 5 seconds\nWait 30 seconds.\nTZ\n\n"
+        "Tara Zane\n1 hour 3 minutes 46 seconds1:03:46\nTara Zane 1 hour 3 minutes 46 seconds\nBye.\n",
+        encoding="utf-8",
+    )
+    r = parse_file(p)
+    assert [(u.speaker, u.text) for u in r.utterances] == [
+        ("Tara Zane", "Mm."),
+        ("WH Huddle Room", "Before. Just numbers? OK Wait 30 seconds."),
+        ("Tara Zane", "Bye."),
+    ]
+
+
+def test_spoken_durations_are_not_speakers_outside_teams_layout():
+    r = parse_text("Cass: Hold on.\nwait 30 seconds\nDev: Sure.")
+    assert r.speakers == ["Cass", "Dev"]
