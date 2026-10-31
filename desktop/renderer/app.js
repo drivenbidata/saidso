@@ -457,15 +457,24 @@ async function openConfig() {
 
 // ---------------------------------------------------------------- actions
 
+// However a recording ends, its participants end with it. The engine already
+// wrote them into that transcript; left on screen they were sent again with the
+// next Record, so one meeting's attendees turned up in every meeting after it.
+function recordingEnded() {
+  recording = false;
+  stopTimer();
+  busy = true;
+  participants = [];
+  renderParticipants();
+  syncControls();
+  setProgress(null, "Transcribing…");
+}
+
 els.record.addEventListener("click", async () => {
   try {
     if (recording) {
       await api("POST", "/record/stop");
-      recording = false;
-      stopTimer();
-      busy = true;
-      syncControls();
-      setProgress(null, "Transcribing…");
+      recordingEnded();
       return;
     }
     // Anything typed but not yet added should still count — nobody should
@@ -668,12 +677,8 @@ window.saidso.onEvent((event) => {
       if (event.state === "stopped" && event.reason) {
         // The clock stopped it, not a click, so the window's own state is
         // stale — catch up rather than leave a timer running on nothing.
-        recording = false;
-        stopTimer();
-        busy = true;
         hideCheckIn();
-        syncControls();
-        setProgress(null, "Transcribing…");
+        recordingEnded();
         log(`Recording stopped automatically — ${event.reason}.`, "warn");
       }
       break;

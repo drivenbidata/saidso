@@ -149,3 +149,76 @@ def test_teams_copy_paste_txt(tmp_path):
 def test_spoken_durations_are_not_speakers_outside_teams_layout():
     r = parse_text("Cass: Hold on.\nwait 30 seconds\nDev: Sure.")
     assert r.speakers == ["Cass", "Dev"]
+
+
+def test_tactiq_txt_keeps_only_the_transcript_section(tmp_path):
+    """The header read as speakers and the highlights duplicated dialogue."""
+    p = tmp_path / "Sync.txt"
+    p.write_text(
+        "# Sync\n\n"
+        "  Meeting started: 10/8/2026, 3:31:06 PM\n"
+        "  Duration: 37 minutes\n"
+        "  Participants: Jon Fisk, Ray Gold\n\n"
+        "  [View original transcript](https://app.tactiq.io/api/2/u/m/r/abc?o=txt)\n\n"
+        "    ## Highlights\n\n"
+        "    > 09:00 Jon Fisk: A highlighted line.\n\n"
+        "  ## Transcript\n\n"
+        "  00:00 Ray Gold: Yo!\n"
+        "00:36 Jon Fisk: Hi, I'm transcribing this call with my Tactiq AI Extension. "
+        "https://tactiq.io/r/transcribing Hi, I'm transcribing this call with my Tactiq AI "
+        "Extension. https://tactiq.io/r/transcribing\n"
+        "00:36 Jon Fisk: Oh, damn.\n"
+        "01:11:07 Ray Gold: All right, bye.\n",
+        encoding="utf-8",
+    )
+    r = parse_file(p)
+    assert [(u.speaker, u.text) for u in r.utterances] == [
+        ("Ray Gold", "Yo!"),
+        ("Jon Fisk", "Oh, damn."),
+        ("Ray Gold", "All right, bye."),
+    ]
+
+
+def test_a_transcript_heading_alone_does_not_trigger_tactiq_handling():
+    r = parse_text("Cass: Before.\n## Transcript\nDev: After.")
+    assert r.speakers == ["Cass", "Dev"]
+
+
+def test_teams_txt_turn_starting_on_the_minute(tmp_path):
+    """'19 minutes19:00' has no seconds; missing it merged the turn into the last one."""
+    p = tmp_path / "extreme.txt"
+    p.write_text(
+        "Jordan Fisk\n18 minutes 56 seconds18:56\nJordan Fisk 18 minutes 56 seconds\n"
+        "We'll need to probably...\nSK\n"
+        "Sana Kerr\n19 minutes19:00\nSana Kerr 19 minutes\nYeah.\n\n"
+        "Jordan Fisk\n1 hour1:00:00\nJordan Fisk 1 hour\nOK\n"
+        "Theo Banks\n1 hour 2 seconds1:00:02\nTheo Banks 1 hour 2 seconds\nRight.\n",
+        encoding="utf-8",
+    )
+    r = parse_file(p)
+    assert [(u.speaker, u.text) for u in r.utterances] == [
+        ("Jordan Fisk", "We'll need to probably..."),
+        ("Sana Kerr", "Yeah."),
+        ("Jordan Fisk", "OK"),
+        ("Theo Banks", "Right."),
+    ]
+
+
+def test_teams_transcript_saved_as_txt(tmp_path):
+    """The DOCX layout in a .txt came back as one unattributed block."""
+    p = tmp_path / "touchpoint.txt"
+    p.write_text(
+        "1099s touchpoint-20261030_120142-Meeting Recording\r\n"
+        "October 30, 2026, 5:01PM\r\n40m 2s\r\n\r\n"
+        "Jordan Fisk started transcription\r\n\r\n"
+        "Jordan Fisk   0:04\r\nAre you using Claude yet?\r\n\r\n"
+        "Sofia Cruz   0:10\r\nLike, not really.\r\nMeet me at 3:30 tomorrow.\r\n\r\n"
+        "Jordan Fisk   1:02:15\r\nOK.\r\n",
+        encoding="utf-8",
+    )
+    r = parse_file(p)
+    assert [(u.speaker, u.text) for u in r.utterances] == [
+        ("Jordan Fisk", "Are you using Claude yet?"),
+        ("Sofia Cruz", "Like, not really. Meet me at 3:30 tomorrow."),
+        ("Jordan Fisk", "OK."),
+    ]

@@ -71,9 +71,14 @@ def parse_docx(path: Path) -> list[Utterance]:
     # Teams puts a speaker header and its dialogue in ONE paragraph separated by
     # soft line breaks - sometimes the whole meeting is a single paragraph - so
     # split on newlines rather than trusting paragraph boundaries.
-    lines = [
-        ln.strip() for p in doc.paragraphs for ln in p.text.splitlines() if ln.strip()
-    ]
+    return _parse_teams_lines(
+        [ln for p in doc.paragraphs for ln in p.text.splitlines()]
+    )
+
+
+def _parse_teams_lines(raw_lines: list[str]) -> list[Utterance]:
+    """Turns headed "Ana Ruiz   0:01", as in Teams' DOCX and its text export."""
+    lines = [ln.strip() for ln in raw_lines if ln.strip()]
     lines = [ln for ln in lines if not P.SYSTEM_RE.match(ln)]
 
     def speaker_line(line: str) -> re.Match[str] | None:
@@ -139,11 +144,27 @@ def _strip_teams_txt_scaffolding(lines: list[str]) -> list[str]:
             drop.add(i)
             if i > 0:
                 drop.add(i - 1)
+            # With no blank line before the turn, the initials sit right above
+            # the name. Matching them to the name keeps a closing "OK" safe.
+            if i > 1 and P.AVATAR_INITIALS_RE.match(lines[i - 2]):
+                initials = "".join(w[0] for w in lines[i - 1].split()).upper()
+                if lines[i - 2].strip() == initials:
+                    drop.add(i - 2)
         elif P.AVATAR_INITIALS_RE.match(ln):
             following = lines[i + 1] if i + 1 < len(lines) else ""
             if not following.strip():
                 drop.add(i)
     return [ln for i, ln in enumerate(lines) if i not in drop]
+
+
+def _tactiq_transcript(lines: list[str]) -> list[str] | None:
+    """The "## Transcript" section of a Tactiq export, or None if it isn't one."""
+    if not any(P.TACTIQ_MARKER_RE.match(ln) for ln in lines[:20]):
+        return None
+    for i, ln in enumerate(lines):
+        if P.TACTIQ_TRANSCRIPT_RE.match(ln):
+            return [P.TACTIQ_PLUG_RE.sub("", ln) for ln in lines[i + 1:]]
+    return None
 
 
 def parse_markdown(text: str) -> list[Utterance]:
@@ -172,6 +193,12 @@ def parse_markdown(text: str) -> list[Utterance]:
         buf = []
 
     raw_lines = body_text.splitlines()
+    # Teams' transcript saved as text keeps the DOCX layout.
+    if any(P.TEAMS_TEXT_HEADER_RE.match(ln) for ln in raw_lines):
+        return _parse_teams_lines(raw_lines)
+    tactiq = _tactiq_transcript(raw_lines)
+    if tactiq is not None:
+        raw_lines = tactiq
     teams_txt = any(P.TEAMS_TXT_TIME_RE.match(ln) for ln in raw_lines)
     if teams_txt:
         raw_lines = _strip_teams_txt_scaffolding(raw_lines)
