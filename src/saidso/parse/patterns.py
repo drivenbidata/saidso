@@ -13,8 +13,14 @@ VTT_SPEAKER_RE = re.compile(r"<v\s+([^>]+?)>(.*?)</v>", re.IGNORECASE | re.DOTAL
 TIMESTAMP_RE = re.compile(r"^\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?\s*$")
 
 # Teams' DOCX export: "Ana Ruiz   0:01" then dialogue, or all on one line.
+# The name may start lowercase ("morgan") - Teams shows whatever the guest typed.
 DOCX_SPEAKER_LINE_RE = re.compile(
-    r"^([A-Z][\w'.-]+(?:\s+[A-Z][\w'.-]+){0,3})\s+(\d{1,2}:\d{2}(?::\d{2})?)\s*(.*)$"
+    r"^([A-Za-z][\w'.-]+(?:\s+[A-Za-z][\w'.-]+){0,3})\s+(\d{1,2}:\d{2}(?::\d{2})?)\s*(.*)$"
+)
+# The same header alone on its line, as in a Teams transcript saved as .txt.
+# The wide gap and empty tail keep "Meet me at 3:30" from matching.
+TEAMS_TEXT_HEADER_RE = re.compile(
+    r"^\s*[A-Za-z][\w'.-]+(?:\s+[A-Za-z][\w'.-]+){0,3}\s{2,}\d{1,2}:\d{2}(?::\d{2})?\s*$"
 )
 DOCX_SPEAKER_ONLY_RE = re.compile(
     r"^([A-Z][\w'.-]+(?:\s+[A-Z][\w'.-]+){0,3})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?\s*$"
@@ -82,13 +88,45 @@ SPEAKER_HEADING_HASH_RE = re.compile(
 )
 ANY_HEADING_RE = re.compile(r"^\s*\#{1,6}\s+")
 
+# Teams' copy-paste transcript (.txt): each turn is headed
+#   Tara Zane                             <- name alone
+#   0 minutes 29 seconds0:29              <- spoken + clock time, run together
+#   Tara Zane 0 minutes 29 seconds        <- the header we key on
+#   Mm.
+#   TZ                                    <- next speaker's avatar initials
+# Continuation turns carry only the third line. Gated on TEAMS_TXT_TIME_RE being
+# present, since "wait 30 seconds" is ordinary dialogue anywhere else.
+# A turn that starts on the minute drops the seconds: "19 minutes19:00".
+_SPOKEN_TIME = (
+    r"(?:\d+ hours?(?: \d+ minutes?)?(?: \d+ seconds?)?"
+    r"|\d+ minutes?(?: \d+ seconds?)?"
+    r"|\d+ seconds?)"
+)
+TEAMS_TXT_TIME_RE = re.compile(rf"^\s*{_SPOKEN_TIME}\d{{1,2}}:\d{{2}}(?::\d{{2}})?\s*$")
+TEAMS_TXT_HEADER_RE = re.compile(rf"^\s*(?P<name>.+?)\s+{_SPOKEN_TIME}\s*$")
+AVATAR_INITIALS_RE = re.compile(r"^\s*[A-Z]{1,3}\s*$")
+
+# Tactiq's export (.txt): a "Meeting started / Duration / Participants" header,
+# a "## Highlights" section quoting lines from the meeting, then "## Transcript"
+# with "00:36 Jon Fisk: text" lines. Only the transcript section is dialogue -
+# the highlights would duplicate it, and the header would be read as speakers.
+TACTIQ_MARKER_RE = re.compile(r"^\s*(?:Meeting started:|\[View original transcript\]\(https://app\.tactiq\.io/)")
+TACTIQ_TRANSCRIPT_RE = re.compile(r"^\s*\#{1,6}\s+Transcript\s*$", re.IGNORECASE)
+# The extension announces itself into the call, sometimes twice on one line.
+TACTIQ_PLUG_RE = re.compile(
+    r"\s*Hi, I'm transcribing this call with my Tactiq AI Extension\.?\s*(?:https://tactiq\.io/\S*)?",
+    re.IGNORECASE,
+)
+
 # Structure, not speech.
 NOISE_RE = re.compile(r"^\s*(?:-{3,}|={3,}|\*{3,}|\|.*\||>\s*)\s*$")
 
 # Meeting-platform chatter that isn't dialogue.
 SYSTEM_RE = re.compile(
     r"^\s*(?:\*+\s*)?(?:recording (?:started|stopped)|transcription (?:started|stopped)|"
-    r".{0,60}\b(?:joined|left) the meeting\b.{0,20})(?:\s*\*+)?\s*$",
+    r".{0,60}\b(?:joined|left) the meeting\b.{0,20}|"
+    r".{0,60}\b(?:started|stopped) (?:transcription|recording)|"
+    r"a?i-generated content may be incorrect\.?)(?:\s*\*+)?\s*$",
     re.IGNORECASE,
 )
 

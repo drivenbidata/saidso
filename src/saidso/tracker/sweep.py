@@ -14,9 +14,13 @@ check-off before wiring any of this up.
 from __future__ import annotations
 
 import datetime as dt
+import re
 from dataclasses import dataclass, field
 
 from .model import Block, Item, Tracker, parse
+
+# "[[note-basename|Title]]" or "[Title](path/note.md)" - the note a heading links.
+LINK_TARGET_RE = re.compile(r"\[\[(?P<wiki>[^\]|]+)(?:\|[^\]]*)?\]\]|\]\((?P<md>[^)]+)\)")
 
 
 @dataclass(slots=True)
@@ -113,6 +117,10 @@ def add_meeting(
 ) -> str:
     """Insert a meeting and its items at the top of Open.
 
+    If the meeting already has a heading under Open — a note regenerated from a
+    better transcript, say — the items join that heading instead of starting a
+    second one, and items already listed there are skipped.
+
     Never touches Completed and never edits existing entries — an insertion and
     nothing else, so a hand-maintained tracker stays as its owner left it.
     """
@@ -120,12 +128,36 @@ def add_meeting(
         return text
     tracker = parse(text)
     suffix = f" — {date.isoformat()}" if date else ""
-    block = Block(
-        heading=f"## {heading}{suffix}",
-        items=[Item(text=i, checked=False) for i in items],
+    new = Block(heading=f"## {heading}{suffix}")
+
+    existing = next(
+        (b for b in tracker.open_blocks if b.heading and _same_meeting(b, new)), None
     )
-    tracker.add_block(block)
+    if existing is None:
+        new.items = [Item(text=i, checked=False) for i in items]
+        tracker.add_block(new)
+        return tracker.render()
+
+    listed = {i.text for i in existing.items}
+    fresh = [i for i in dict.fromkeys(items) if i not in listed]
+    if not fresh:
+        return text
+    existing.items += [Item(text=i, checked=False) for i in fresh]
     return tracker.render()
+
+
+def _same_meeting(a: Block, b: Block) -> bool:
+    """Headings name the same meeting when they link the same note.
+
+    Compared on the link target, so a retitled heading for the same note still
+    matches; headings without a link fall back to comparing the whole text.
+    """
+    def key(block: Block) -> str:
+        body = block.attribution
+        m = LINK_TARGET_RE.search(body)
+        return (m.group("wiki") or m.group("md")).strip().lower() if m else body.lower()
+
+    return key(a) == key(b)
 
 
 def starter(title: str) -> str:

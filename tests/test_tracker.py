@@ -28,6 +28,32 @@ def test_add_with_no_items_is_a_no_op():
     assert add_meeting(text, heading="Empty", items=[]) == text
 
 
+def test_adding_to_a_meeting_already_open_joins_its_heading():
+    """A regenerated note's new items used to start a duplicate heading."""
+    text = _tracker_with(["First thing", "Second thing"])
+    text = add_meeting(text, heading="[[acme-standup-2026-09-02|Standup]]",
+                       items=["Other meeting"], date=dt.date(2026, 9, 2))
+    text = add_meeting(text, heading="[[acme-sync-2026-09-01|Weekly Sync, Retitled]]",
+                       items=["Second thing", "Third thing"], date=dt.date(2026, 9, 1))
+    blocks = parse(text).open_blocks
+    assert len(blocks) == 2
+    assert "Standup" in blocks[0].heading  # order is left alone
+    assert [i.text for i in blocks[1].items] == ["First thing", "Second thing", "Third thing"]
+
+
+def test_adding_only_items_already_listed_changes_nothing():
+    text = _tracker_with(["First thing"])
+    assert add_meeting(text, heading="[[acme-sync-2026-09-01|Weekly Sync]]",
+                       items=["First thing"], date=dt.date(2026, 9, 1)) == text
+
+
+def test_headings_without_links_match_on_their_text():
+    text = add_meeting(starter("Acme"), heading="Weekly Sync", items=["One"])
+    text = add_meeting(text, heading="Weekly Sync", items=["Two"])
+    blocks = parse(text).open_blocks
+    assert len(blocks) == 1 and [i.text for i in blocks[0].items] == ["One", "Two"]
+
+
 def test_sweep_moves_ticked_items_with_attribution():
     text = _tracker_with(["Send Rob the list · due: 2026-09-05", "Keep this open"])
     result = sweep(text.replace("- [ ] Send Rob", "- [x] Send Rob"), today=dt.date(2026, 9, 4))

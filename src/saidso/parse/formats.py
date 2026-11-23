@@ -68,7 +68,32 @@ def parse_docx(path: Path) -> list[Utterance]:
         raise MissingDependency("python-docx", "docx", "Reading .docx transcripts") from e
 
     doc = Document(str(path))
-    lines = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+    # Teams puts a speaker header and its dialogue in ONE paragraph separated by
+    # soft line breaks - sometimes the whole meeting is a single paragraph - so
+    # split on newlines rather than trusting paragraph boundaries.
+    return _parse_teams_lines(
+        [ln for p in doc.paragraphs for ln in p.text.splitlines()]
+    )
+
+
+def _parse_teams_lines(raw_lines: list[str]) -> list[Utterance]:
+    """Turns headed "Ana Ruiz   0:01", as in Teams' DOCX and its text export."""
+    lines = [ln.strip() for ln in raw_lines if ln.strip()]
+    lines = [ln for ln in lines if not P.SYSTEM_RE.match(ln)]
+
+    def speaker_line(line: str) -> re.Match[str] | None:
+        m = P.DOCX_SPEAKER_LINE_RE.match(line)
+        if not m or not plausible_speaker(m.group(1)):
+            return None
+        # "Meet me at 3:30 tomorrow" is dialogue, not a header: with text after
+        # the time, demand Teams' wide gap between name and timestamp.
+        if m.group(3).strip() and len(line[m.end(1):m.start(2)]) < 2:
+            return None
+        return m
+
+    # A bare name with no timestamp is only a speaker in exports that never
+    # timestamp their headers. In Teams exports it is the recording title.
+    timestamped = any(speaker_line(ln) for ln in lines)
 
     out: list[Utterance] = []
     speaker: str | None = None
@@ -83,21 +108,63 @@ def parse_docx(path: Path) -> list[Utterance]:
         buf = []
 
     for line in lines:
-        m = P.DOCX_SPEAKER_LINE_RE.match(line)
+        m = speaker_line(line)
         if m:
             flush()
             speaker = m.group(1).strip()
             if tail := m.group(3).strip():
                 buf.append(tail)
             continue
-        only = P.DOCX_SPEAKER_ONLY_RE.match(line)
-        if only and len(line) < 80:
+        only = None if timestamped else P.DOCX_SPEAKER_ONLY_RE.match(line)
+        # "Hello." fits the name shape; a closing sentence mark means dialogue.
+        if (
+            only
+            and len(line) < 80
+            and plausible_speaker(only.group(1))
+            and not line.endswith((".", "!", "?"))
+        ):
             flush()
             speaker = only.group(1).strip()
             continue
         buf.append(line)
     flush()
     return out
+
+
+def _strip_teams_txt_scaffolding(lines: list[str]) -> list[str]:
+    """Drop the layout lines around each turn in Teams' copy-paste transcript.
+
+    Removes the time line, the bare name above it, and avatar initials that sit
+    just before a blank line - leaving only "Name 0 minutes 29 seconds" headers
+    and dialogue. See TEAMS_TXT_TIME_RE for the layout.
+    """
+    drop: set[int] = set()
+    for i, ln in enumerate(lines):
+        if P.TEAMS_TXT_TIME_RE.match(ln):
+            drop.add(i)
+            if i > 0:
+                drop.add(i - 1)
+            # With no blank line before the turn, the initials sit right above
+            # the name. Matching them to the name keeps a closing "OK" safe.
+            if i > 1 and P.AVATAR_INITIALS_RE.match(lines[i - 2]):
+                initials = "".join(w[0] for w in lines[i - 1].split()).upper()
+                if lines[i - 2].strip() == initials:
+                    drop.add(i - 2)
+        elif P.AVATAR_INITIALS_RE.match(ln):
+            following = lines[i + 1] if i + 1 < len(lines) else ""
+            if not following.strip():
+                drop.add(i)
+    return [ln for i, ln in enumerate(lines) if i not in drop]
+
+
+def _tactiq_transcript(lines: list[str]) -> list[str] | None:
+    """The "## Transcript" section of a Tactiq export, or None if it isn't one."""
+    if not any(P.TACTIQ_MARKER_RE.match(ln) for ln in lines[:20]):
+        return None
+    for i, ln in enumerate(lines):
+        if P.TACTIQ_TRANSCRIPT_RE.match(ln):
+            return [P.TACTIQ_PLUG_RE.sub("", ln) for ln in lines[i + 1:]]
+    return None
 
 
 def parse_markdown(text: str) -> list[Utterance]:
@@ -125,12 +192,31 @@ def parse_markdown(text: str) -> list[Utterance]:
                 out.append(Utterance(speaker, body))
         buf = []
 
-    for raw in body_text.splitlines():
+    raw_lines = body_text.splitlines()
+    # Teams' transcript saved as text keeps the DOCX layout.
+    if any(P.TEAMS_TEXT_HEADER_RE.match(ln) for ln in raw_lines):
+        return _parse_teams_lines(raw_lines)
+    tactiq = _tactiq_transcript(raw_lines)
+    if tactiq is not None:
+        raw_lines = tactiq
+    teams_txt = any(P.TEAMS_TXT_TIME_RE.match(ln) for ln in raw_lines)
+    if teams_txt:
+        raw_lines = _strip_teams_txt_scaffolding(raw_lines)
+
+    for raw in raw_lines:
         line = raw.rstrip()
         if not line.strip():
             continue
         if P.NOISE_RE.match(line) or P.SYSTEM_RE.match(line):
             continue
+
+        if teams_txt:
+            header = P.TEAMS_TXT_HEADER_RE.match(line)
+            if header and plausible_speaker(header.group("name")):
+                flush()
+                speaker = header.group("name").strip()
+                saw_speaker = True
+                continue
 
         stripped = P.LEADING_TS_RE.sub("", line, count=1)
 
